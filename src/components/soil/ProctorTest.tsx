@@ -5,27 +5,35 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Plus, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useProject } from "@/context/ProjectContext";
+import { generateTestPDF } from "@/lib/pdfGenerator";
 
 interface Row { moisture: string; dryDensity: string }
 
 const ProctorTest = () => {
+  const project = useProject();
   const [type, setType] = useState("standard");
   const [rows, setRows] = useState<Row[]>([
-    { moisture: "", dryDensity: "" },
-    { moisture: "", dryDensity: "" },
-    { moisture: "", dryDensity: "" },
-    { moisture: "", dryDensity: "" },
-    { moisture: "", dryDensity: "" },
+    { moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },
   ]);
 
   const update = (i: number, field: keyof Row, val: string) => {
-    const next = [...rows];
-    next[i] = { ...next[i], [field]: val };
-    setRows(next);
+    const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next);
+  };
+
+  const exportPDF = () => {
+    generateTestPDF({
+      title: `Proctor Test (${type === "standard" ? "Standard" : "Modified"})`,
+      ...project,
+      tables: [{
+        headers: ["Point", "Moisture Content (%)", "Dry Density (kg/m³)"],
+        rows: rows.map((r, i) => [String(i + 1), r.moisture || "—", r.dryDensity || "—"]),
+      }],
+    });
   };
 
   return (
-    <TestSection title="Proctor Test" onSave={() => {}} onClear={() => setRows([{ moisture: "", dryDensity: "" }])}>
+    <TestSection title="Proctor Test" onSave={() => {}} onClear={() => setRows([{ moisture: "", dryDensity: "" }])} onExportPDF={exportPDF}>
       <div className="mb-4 max-w-xs">
         <Label className="text-xs text-muted-foreground mb-1.5 block">Test Type</Label>
         <Select value={type} onValueChange={setType}>
@@ -38,37 +46,20 @@ const ProctorTest = () => {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2 px-2 font-medium text-muted-foreground">Point</th>
-              <th className="text-left py-2 px-2 font-medium text-muted-foreground">Moisture Content (%)</th>
-              <th className="text-left py-2 px-2 font-medium text-muted-foreground">Dry Density (kg/m³)</th>
-              <th className="w-10"></th>
-            </tr>
-          </thead>
+          <thead><tr className="border-b"><th className="text-left py-2 px-2 font-medium text-muted-foreground">Point</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">Moisture Content (%)</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">Dry Density (kg/m³)</th><th className="w-10"></th></tr></thead>
           <tbody>
             {rows.map((row, i) => (
               <tr key={i} className="border-b border-border/50">
                 <td className="py-1.5 px-2 text-muted-foreground font-mono text-xs">{i + 1}</td>
-                <td className="py-1.5 px-2">
-                  <Input type="number" value={row.moisture} onChange={(e) => update(i, "moisture", e.target.value)} className="h-8" placeholder="0" />
-                </td>
-                <td className="py-1.5 px-2">
-                  <Input type="number" value={row.dryDensity} onChange={(e) => update(i, "dryDensity", e.target.value)} className="h-8" placeholder="0" />
-                </td>
-                <td className="py-1.5 px-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </td>
+                <td className="py-1.5 px-2"><Input type="number" value={row.moisture} onChange={(e) => update(i, "moisture", e.target.value)} className="h-8" placeholder="0" /></td>
+                <td className="py-1.5 px-2"><Input type="number" value={row.dryDensity} onChange={(e) => update(i, "dryDensity", e.target.value)} className="h-8" placeholder="0" /></td>
+                <td className="py-1.5 px-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setRows(rows.filter((_, j) => j !== i))}><X className="h-3.5 w-3.5" /></Button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <Button variant="outline" size="sm" className="mt-3" onClick={() => setRows([...rows, { moisture: "", dryDensity: "" }])}>
-        <Plus className="h-3.5 w-3.5 mr-1" /> Add Point
-      </Button>
+      <Button variant="outline" size="sm" className="mt-3" onClick={() => setRows([...rows, { moisture: "", dryDensity: "" }])}><Plus className="h-3.5 w-3.5 mr-1" /> Add Point</Button>
     </TestSection>
   );
 };

@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import CalculatedInput from "@/components/CalculatedInput";
 import { Plus, X } from "lucide-react";
+import { useProject } from "@/context/ProjectContext";
+import { generateTestPDF } from "@/lib/pdfGenerator";
 
 interface Row {
   sieveSize: string;
@@ -11,6 +13,7 @@ interface Row {
 }
 
 const GradingTest = () => {
+  const project = useProject();
   const defaultRows: Row[] = [
     { sieveSize: "75", weightRetained: "" },
     { sieveSize: "63", weightRetained: "" },
@@ -46,12 +49,19 @@ const GradingTest = () => {
     setRows(next);
   };
 
+  const exportPDF = () => {
+    generateTestPDF({
+      title: "Grading (Sieve Analysis)",
+      ...project,
+      tables: [{
+        headers: ["Sieve Size (mm)", "Weight Retained (g)", "% Passing"],
+        rows: rows.map((r, i) => [r.sieveSize, r.weightRetained || "—", getPercentPassing(i) || "—"]),
+      }],
+    });
+  };
+
   return (
-    <TestSection
-      title="Grading (Sieve Analysis)"
-      onSave={() => {}}
-      onClear={() => setRows(defaultRows)}
-    >
+    <TestSection title="Grading (Sieve Analysis)" onSave={() => {}} onClear={() => setRows(defaultRows)} onExportPDF={exportPDF}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
