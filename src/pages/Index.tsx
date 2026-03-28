@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
+import { ProjectContext } from "@/context/ProjectContext";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FlaskConical, Mountain, Hammer, TestTubeDiagonal } from "lucide-react";
