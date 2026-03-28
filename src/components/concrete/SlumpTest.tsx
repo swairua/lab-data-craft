@@ -3,13 +3,20 @@ import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useProject } from "@/context/ProjectContext";
+import { generateTestPDF } from "@/lib/pdfGenerator";
 
 const SlumpTest = () => {
+  const project = useProject();
   const [slump, setSlump] = useState("");
   const [remarks, setRemarks] = useState("");
 
+  const exportPDF = () => {
+    generateTestPDF({ title: "Slump Test", ...project, fields: [{ label: "Slump Value (mm)", value: slump }, { label: "Remarks", value: remarks }] });
+  };
+
   return (
-    <TestSection title="Slump Test" onSave={() => {}} onClear={() => { setSlump(""); setRemarks(""); }}>
+    <TestSection title="Slump Test" onSave={() => {}} onClear={() => { setSlump(""); setRemarks(""); }} onExportPDF={exportPDF}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Slump Value (mm)</Label>
