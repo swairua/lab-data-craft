@@ -28,6 +28,18 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
             {title}
           </CardTitle>
           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            {onExportCSV && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  onExportCSV();
+                  toast.success(`${title} CSV downloaded`);
+                }}
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> CSV
+              </Button>
+            )}
             {onExportPDF && (
               <Button
                 size="sm"
