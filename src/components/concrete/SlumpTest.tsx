@@ -1,0 +1,27 @@
+import { useState } from "react";
+import TestSection from "@/components/TestSection";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+const SlumpTest = () => {
+  const [slump, setSlump] = useState("");
+  const [remarks, setRemarks] = useState("");
+
+  return (
+    <TestSection title="Slump Test" onSave={() => {}} onClear={() => { setSlump(""); setRemarks(""); }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Slump Value (mm)</Label>
+          <Input type="number" value={slump} onChange={(e) => setSlump(e.target.value)} placeholder="0" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Remarks</Label>
+          <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. True slump, collapse..." className="resize-none h-9 min-h-[36px]" />
+        </div>
+      </div>
+    </TestSection>
+  );
+};
+
+export default SlumpTest;
