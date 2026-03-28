@@ -7,6 +7,7 @@ import { Plus, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
+import { generateTestCSV } from "@/lib/csvExporter";
 
 interface Row { moisture: string; dryDensity: string }
 
