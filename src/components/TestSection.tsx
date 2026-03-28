@@ -13,7 +13,7 @@ interface TestSectionProps {
   onExportCSV?: () => void;
 }
 
-const TestSection = ({ title, children, onSave, onClear, onExportPDF }: TestSectionProps) => {
+const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV }: TestSectionProps) => {
   const [open, setOpen] = useState(true);
 
   return (
