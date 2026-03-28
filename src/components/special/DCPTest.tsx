@@ -1,0 +1,51 @@
+import { useState } from "react";
+import TestSection from "@/components/TestSection";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Plus, X } from "lucide-react";
+
+interface Row { depth: string; penetration: string }
+
+const DCPTest = () => {
+  const [rows, setRows] = useState<Row[]>([
+    { depth: "", penetration: "" },
+    { depth: "", penetration: "" },
+    { depth: "", penetration: "" },
+  ]);
+
+  const update = (i: number, field: keyof Row, val: string) => {
+    const next = [...rows];
+    next[i] = { ...next[i], [field]: val };
+    setRows(next);
+  };
+
+  return (
+    <TestSection title="DCP (Dynamic Cone Penetrometer)" onSave={() => {}} onClear={() => setRows([{ depth: "", penetration: "" }])}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2 px-2 font-medium text-muted-foreground">Depth (mm)</th>
+              <th className="text-left py-2 px-2 font-medium text-muted-foreground">Penetration per Blow (mm/blow)</th>
+              <th className="w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} className="border-b border-border/50">
+                <td className="py-1.5 px-2"><Input type="number" value={row.depth} onChange={(e) => update(i, "depth", e.target.value)} className="h-8" placeholder="0" /></td>
+                <td className="py-1.5 px-2"><Input type="number" value={row.penetration} onChange={(e) => update(i, "penetration", e.target.value)} className="h-8" placeholder="0" /></td>
+                <td className="py-1.5 px-1"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setRows(rows.filter((_, j) => j !== i))}><X className="h-3.5 w-3.5" /></Button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Button variant="outline" size="sm" className="mt-3" onClick={() => setRows([...rows, { depth: "", penetration: "" }])}>
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add Row
+      </Button>
+    </TestSection>
+  );
+};
+
+export default DCPTest;
