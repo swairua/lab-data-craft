@@ -106,6 +106,7 @@ const Index = () => {
         </Tabs>
       </main>
     </div>
+    </ProjectContext.Provider>
   );
 };
 
