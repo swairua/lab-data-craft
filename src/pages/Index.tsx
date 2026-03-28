@@ -27,7 +27,10 @@ const Index = () => {
   const [clientName, setClientName] = useState("");
   const today = new Date().toISOString().split("T")[0];
 
+  const projectCtx = useMemo(() => ({ projectName, clientName, date: today }), [projectName, clientName, today]);
+
   return (
+    <ProjectContext.Provider value={projectCtx}>
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card sticky top-0 z-10">
