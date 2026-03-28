@@ -19,7 +19,7 @@ const ShearTest = () => {
   };
 
   return (
-    <TestSection title="Shear Test" onSave={() => {}} onClear={() => setRows([{ normalStress: "", shearStress: "" }])} onExportPDF={exportPDF}>
+    <TestSection title="Shear Test" onSave={() => {}} onClear={() => setRows([{ normalStress: "", shearStress: "" }])} onExportPDF={exportPDF} onExportCSV={() => generateTestCSV({ title: "Shear Test", ...project, tables: [{ headers: ["Normal Stress (kPa)", "Shear Stress (kPa)"], rows: rows.map(r => [r.normalStress || "—", r.shearStress || "—"]) }] })}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b"><th className="text-left py-2 px-2 font-medium text-muted-foreground">Normal Stress (kPa)</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">Shear Stress (kPa)</th><th className="w-10"></th></tr></thead>

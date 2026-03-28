@@ -26,8 +26,10 @@ const AtterbergTest = () => {
     });
   };
 
+  const csvData = { title: "Atterberg Limits", ...project, fields: [{ label: "Liquid Limit (LL) %", value: ll }, { label: "Plastic Limit (PL) %", value: pl }, { label: "Plasticity Index (PI) %", value: pi }] };
+
   return (
-    <TestSection title="Atterberg Limits" onSave={() => {}} onClear={() => { setLl(""); setPl(""); }} onExportPDF={exportPDF}>
+    <TestSection title="Atterberg Limits" onSave={() => {}} onClear={() => { setLl(""); setPl(""); }} onExportPDF={exportPDF} onExportCSV={() => generateTestCSV(csvData)}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Liquid Limit (LL) %</Label>
