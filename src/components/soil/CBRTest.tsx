@@ -6,6 +6,7 @@ import CalculatedInput from "@/components/CalculatedInput";
 import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
+import { generateTestCSV } from "@/lib/csvExporter";
 
 const STANDARD_LOAD_2_5 = 13.24;
 const STANDARD_LOAD_5_0 = 19.96;
