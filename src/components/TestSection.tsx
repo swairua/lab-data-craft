@@ -1,7 +1,7 @@
 import { ReactNode, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Save, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Save, Trash2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 
 interface TestSectionProps {
@@ -9,9 +9,10 @@ interface TestSectionProps {
   children: ReactNode;
   onSave?: () => void;
   onClear?: () => void;
+  onExportPDF?: () => void;
 }
 
-const TestSection = ({ title, children, onSave, onClear }: TestSectionProps) => {
+const TestSection = ({ title, children, onSave, onClear, onExportPDF }: TestSectionProps) => {
   const [open, setOpen] = useState(true);
 
   return (
@@ -26,6 +27,18 @@ const TestSection = ({ title, children, onSave, onClear }: TestSectionProps) => 
             {title}
           </CardTitle>
           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            {onExportPDF && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  onExportPDF();
+                  toast.success(`${title} PDF downloaded`);
+                }}
+              >
+                <FileDown className="h-3.5 w-3.5 mr-1" /> PDF
+              </Button>
+            )}
             {onSave && (
               <Button
                 size="sm"
