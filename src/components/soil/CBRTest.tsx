@@ -6,6 +6,7 @@ import CalculatedInput from "@/components/CalculatedInput";
 import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
+import { generateTestCSV } from "@/lib/csvExporter";
 
 const STANDARD_LOAD_2_5 = 13.24;
 const STANDARD_LOAD_5_0 = 19.96;
@@ -37,7 +38,7 @@ const CBRTest = () => {
   };
 
   return (
-    <TestSection title="CBR (California Bearing Ratio)" onSave={() => {}} onClear={() => setRows([{ penetration: "", load: "" }])} onExportPDF={exportPDF}>
+    <TestSection title="CBR (California Bearing Ratio)" onSave={() => {}} onClear={() => setRows([{ penetration: "", load: "" }])} onExportPDF={exportPDF} onExportCSV={() => generateTestCSV({ title: "CBR (California Bearing Ratio)", ...project, tables: [{ headers: ["Penetration (mm)", "Load (kN)", "CBR (%)"], rows: rows.map(r => [r.penetration, r.load || "—", getCBR(r.penetration, r.load) || "—"]) }] })}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b"><th className="text-left py-2 px-2 font-medium text-muted-foreground">Penetration (mm)</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">Load (kN)</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">CBR (%)</th><th className="w-10"></th></tr></thead>

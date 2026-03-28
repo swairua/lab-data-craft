@@ -6,6 +6,7 @@ import CalculatedInput from "@/components/CalculatedInput";
 import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
+import { generateTestCSV } from "@/lib/csvExporter";
 
 interface Row {
   sieveSize: string;
@@ -61,7 +62,7 @@ const GradingTest = () => {
   };
 
   return (
-    <TestSection title="Grading (Sieve Analysis)" onSave={() => {}} onClear={() => setRows(defaultRows)} onExportPDF={exportPDF}>
+    <TestSection title="Grading (Sieve Analysis)" onSave={() => {}} onClear={() => setRows(defaultRows)} onExportPDF={exportPDF} onExportCSV={() => generateTestCSV({ title: "Grading (Sieve Analysis)", ...project, tables: [{ headers: ["Sieve Size (mm)", "Weight Retained (g)", "% Passing"], rows: rows.map((r, i) => [r.sieveSize, r.weightRetained || "—", getPercentPassing(i) || "—"]) }] })}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

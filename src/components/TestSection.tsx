@@ -1,7 +1,7 @@
 import { ReactNode, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Save, Trash2, FileDown } from "lucide-react";
+import { ChevronDown, ChevronRight, Save, Trash2, FileDown, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 
 interface TestSectionProps {
@@ -10,9 +10,10 @@ interface TestSectionProps {
   onSave?: () => void;
   onClear?: () => void;
   onExportPDF?: () => void;
+  onExportCSV?: () => void;
 }
 
-const TestSection = ({ title, children, onSave, onClear, onExportPDF }: TestSectionProps) => {
+const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV }: TestSectionProps) => {
   const [open, setOpen] = useState(true);
 
   return (
@@ -27,6 +28,18 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF }: TestSect
             {title}
           </CardTitle>
           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            {onExportCSV && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  onExportCSV();
+                  toast.success(`${title} CSV downloaded`);
+                }}
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> CSV
+              </Button>
+            )}
             {onExportPDF && (
               <Button
                 size="sm"

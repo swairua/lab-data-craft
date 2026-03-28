@@ -6,6 +6,7 @@ import CalculatedInput from "@/components/CalculatedInput";
 import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
+import { generateTestCSV } from "@/lib/csvExporter";
 
 interface Row { sampleId: string; load: string; area: string }
 
@@ -21,7 +22,7 @@ const UCSTest = () => {
   };
 
   return (
-    <TestSection title="UCS (Unconfined Compressive Strength)" onSave={() => {}} onClear={() => setRows([{ sampleId: "", load: "", area: "" }])} onExportPDF={exportPDF}>
+    <TestSection title="UCS (Unconfined Compressive Strength)" onSave={() => {}} onClear={() => setRows([{ sampleId: "", load: "", area: "" }])} onExportPDF={exportPDF} onExportCSV={() => generateTestCSV({ title: "UCS (Unconfined Compressive Strength)", ...project, tables: [{ headers: ["Sample ID", "Load (kN)", "Area (mm²)", "Strength (MPa)"], rows: rows.map(r => [r.sampleId, r.load || "—", r.area || "—", getStrength(r) || "—"]) }] })}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b"><th className="text-left py-2 px-2 font-medium text-muted-foreground">Sample ID</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">Load (kN)</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">Area (mm²)</th><th className="text-left py-2 px-2 font-medium text-muted-foreground">Strength (MPa)</th><th className="w-10"></th></tr></thead>
