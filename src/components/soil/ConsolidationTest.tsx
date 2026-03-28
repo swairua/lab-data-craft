@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
+import { generateTestCSV } from "@/lib/csvExporter";
 
 interface Row { time: string; settlement: string }
 
