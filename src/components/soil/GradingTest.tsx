@@ -6,6 +6,7 @@ import CalculatedInput from "@/components/CalculatedInput";
 import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
+import { generateTestCSV } from "@/lib/csvExporter";
 
 interface Row {
   sieveSize: string;
