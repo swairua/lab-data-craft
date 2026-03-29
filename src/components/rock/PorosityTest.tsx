@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,7 @@ import CalculatedInput from "@/components/CalculatedInput";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { useTestReport } from "@/hooks/useTestReport";
 
 const PorosityTest = () => {
   const project = useProject();
@@ -18,6 +19,12 @@ const PorosityTest = () => {
     if (!dw || !sw || !v || v === 0) return "";
     return (((sw - dw) / v) * 100).toFixed(2);
   })();
+
+  const dataPoints = [dryWeight, satWeight, volume].filter(Boolean).length;
+  const porosityResults = useMemo(() => [
+    { label: "Porosity", value: porosity ? `${porosity}%` : "" },
+  ], [porosity]);
+  useTestReport("porosity", dataPoints, porosityResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "Porosity Test", ...project, fields: [{ label: "Dry Weight (g)", value: dryWeight }, { label: "Saturated Weight (g)", value: satWeight }, { label: "Volume (cm³)", value: volume }, { label: "Porosity (%)", value: porosity }] });

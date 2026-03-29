@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { depth: string; penetration: string }
 
@@ -13,6 +14,14 @@ const DCPTest = () => {
   const project = useProject();
   const [rows, setRows] = useState<Row[]>([{ depth: "", penetration: "" },{ depth: "", penetration: "" },{ depth: "", penetration: "" }]);
   const update = (i: number, field: keyof Row, val: string) => { const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next); };
+
+  const filledDCP = rows.filter(r => r.depth && r.penetration).length;
+  const dcpResults = useMemo(() => {
+    const pens = rows.map(r => parseFloat(r.penetration)).filter(Boolean);
+    const avg = pens.length ? (pens.reduce((a, b) => a + b, 0) / pens.length).toFixed(1) : "";
+    return [{ label: "Avg Pen Rate", value: avg ? `${avg} mm/blow` : "" }];
+  }, [rows]);
+  useTestReport("dcp", filledDCP, dcpResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "DCP (Dynamic Cone Penetrometer)", ...project, tables: [{ headers: ["Depth (mm)", "Penetration per Blow (mm/blow)"], rows: rows.map(r => [r.depth || "—", r.penetration || "—"]) }] });

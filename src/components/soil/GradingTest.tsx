@@ -69,6 +69,12 @@ const GradingTest = () => {
 
   const chartConfig = { percentPassing: { label: "% Passing", color: "hsl(var(--primary))" } };
 
+  const filledGrading = rows.filter(r => r.weightRetained).length;
+  const gradingResults = useMemo(() => [
+    { label: "Total Weight", value: totalWeight ? `${totalWeight.toFixed(1)} g` : "" },
+  ], [totalWeight]);
+  useTestReport("grading", filledGrading, gradingResults);
+
   const exportPDF = () => {
     generateTestPDF({
       title: "Grading (Sieve Analysis)",

@@ -55,6 +55,13 @@ const ShearTest = () => {
     envelope: { label: "Failure Envelope", color: "hsl(var(--destructive))" },
   };
 
+  const filledShear = chartData.length;
+  const shearResults = useMemo(() => [
+    { label: "Cohesion (c)", value: envelope ? `${envelope.cohesion.toFixed(1)} kPa` : "" },
+    { label: "Friction (φ)", value: envelope ? `${envelope.phi.toFixed(1)}°` : "" },
+  ], [envelope]);
+  useTestReport("shear", filledShear, shearResults);
+
   const exportPDF = () => {
     generateTestPDF({ title: "Shear Test", ...project, tables: [{ headers: ["Normal Stress (kPa)", "Shear Stress (kPa)"], rows: rows.map(r => [r.normalStress || "—", r.shearStress || "—"]) }] });
   };

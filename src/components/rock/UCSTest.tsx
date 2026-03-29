@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { sampleId: string; load: string; area: string }
 
@@ -16,6 +17,13 @@ const UCSTest = () => {
 
   const getStrength = (row: Row) => { const l = parseFloat(row.load); const a = parseFloat(row.area); if (!l || !a) return ""; return ((l * 1000) / a).toFixed(2); };
   const update = (i: number, field: keyof Row, val: string) => { const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next); };
+
+  const strengths = rows.map(r => parseFloat(getStrength(r))).filter(Boolean);
+  const avgUCS = strengths.length ? (strengths.reduce((a, b) => a + b, 0) / strengths.length).toFixed(2) : "";
+  const ucsResults = useMemo(() => [
+    { label: "Avg UCS", value: avgUCS ? `${avgUCS} MPa` : "" },
+  ], [avgUCS]);
+  useTestReport("ucs", strengths.length, ucsResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "UCS (Unconfined Compressive Strength)", ...project, tables: [{ headers: ["Sample ID", "Load (kN)", "Area (mm²)", "Strength (MPa)"], rows: rows.map(r => [r.sampleId, r.load || "—", r.area || "—", getStrength(r) || "—"]) }] });

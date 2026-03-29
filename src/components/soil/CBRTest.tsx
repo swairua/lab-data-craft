@@ -42,6 +42,15 @@ const CBRTest = () => {
     [rows]
   );
 
+  const cbr25 = getCBR("2.5", rows.find(r => r.penetration === "2.5")?.load || "");
+  const cbr50 = getCBR("5.0", rows.find(r => r.penetration === "5.0")?.load || "");
+  const filledCBR = rows.filter(r => r.load).length;
+  const cbrResults = useMemo(() => [
+    { label: "CBR @ 2.5mm", value: cbr25 ? `${cbr25}%` : "" },
+    { label: "CBR @ 5.0mm", value: cbr50 ? `${cbr50}%` : "" },
+  ], [cbr25, cbr50]);
+  useTestReport("cbr", filledCBR, cbrResults);
+
   const chartConfig = { load: { label: "Load (kN)", color: "hsl(var(--primary))" } };
 
   const exportPDF = () => {

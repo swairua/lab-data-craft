@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,11 +6,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { useTestReport } from "@/hooks/useTestReport";
 
 const SlumpTest = () => {
   const project = useProject();
   const [slump, setSlump] = useState("");
   const [remarks, setRemarks] = useState("");
+
+  const dataPoints = slump ? 1 : 0;
+  const slumpResults = useMemo(() => [
+    { label: "Slump", value: slump ? `${slump} mm` : "" },
+  ], [slump]);
+  useTestReport("slump", dataPoints, slumpResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "Slump Test", ...project, fields: [{ label: "Slump Value (mm)", value: slump }, { label: "Remarks", value: remarks }] });
