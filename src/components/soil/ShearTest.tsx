@@ -9,6 +9,7 @@ import { generateTestCSV } from "@/lib/csvExporter";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Line } from "recharts";
 import { Label } from "@/components/ui/label";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { normalStress: string; shearStress: string }
 
@@ -53,6 +54,13 @@ const ShearTest = () => {
     shearStress: { label: "Shear Stress (kPa)", color: "hsl(var(--primary))" },
     envelope: { label: "Failure Envelope", color: "hsl(var(--destructive))" },
   };
+
+  const filledShear = chartData.length;
+  const shearResults = useMemo(() => [
+    { label: "Cohesion (c)", value: envelope ? `${envelope.cohesion.toFixed(1)} kPa` : "" },
+    { label: "Friction (φ)", value: envelope ? `${envelope.phi.toFixed(1)}°` : "" },
+  ], [envelope]);
+  useTestReport("shear", filledShear, shearResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "Shear Test", ...project, tables: [{ headers: ["Normal Stress (kPa)", "Shear Stress (kPa)"], rows: rows.map(r => [r.normalStress || "—", r.shearStress || "—"]) }] });

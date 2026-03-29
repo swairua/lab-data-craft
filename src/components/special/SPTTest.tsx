@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { depth: string; blowCount: string }
 
@@ -13,6 +14,14 @@ const SPTTest = () => {
   const project = useProject();
   const [rows, setRows] = useState<Row[]>([{ depth: "", blowCount: "" },{ depth: "", blowCount: "" },{ depth: "", blowCount: "" }]);
   const update = (i: number, field: keyof Row, val: string) => { const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next); };
+
+  const filledSPT = rows.filter(r => r.depth && r.blowCount).length;
+  const sptResults = useMemo(() => {
+    const blows = rows.map(r => parseFloat(r.blowCount)).filter(Boolean);
+    const avg = blows.length ? (blows.reduce((a, b) => a + b, 0) / blows.length).toFixed(0) : "";
+    return [{ label: "Avg N-value", value: avg }];
+  }, [rows]);
+  useTestReport("spt", filledSPT, sptResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "SPT (Standard Penetration Test)", ...project, tables: [{ headers: ["Depth (m)", "Blow Count (N-value)"], rows: rows.map(r => [r.depth || "—", r.blowCount || "—"]) }] });

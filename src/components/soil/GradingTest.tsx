@@ -10,6 +10,7 @@ import { generateTestCSV } from "@/lib/csvExporter";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Label } from "@/components/ui/label";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row {
   sieveSize: string;
@@ -67,6 +68,12 @@ const GradingTest = () => {
   }, [rows, totalWeight]);
 
   const chartConfig = { percentPassing: { label: "% Passing", color: "hsl(var(--primary))" } };
+
+  const filledGrading = rows.filter(r => r.weightRetained).length;
+  const gradingResults = useMemo(() => [
+    { label: "Total Weight", value: totalWeight ? `${totalWeight.toFixed(1)} g` : "" },
+  ], [totalWeight]);
+  useTestReport("grading", filledGrading, gradingResults);
 
   const exportPDF = () => {
     generateTestPDF({

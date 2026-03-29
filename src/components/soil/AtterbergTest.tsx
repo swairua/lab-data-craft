@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,6 +6,7 @@ import CalculatedInput from "@/components/CalculatedInput";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { useTestReport } from "@/hooks/useTestReport";
 
 const AtterbergTest = () => {
   const project = useProject();
@@ -13,6 +14,14 @@ const AtterbergTest = () => {
   const [pl, setPl] = useState("");
 
   const pi = ll && pl ? (parseFloat(ll) - parseFloat(pl)).toFixed(1) : "";
+
+  const dataPoints = [ll, pl].filter(Boolean).length;
+  const keyResults = useMemo(() => [
+    { label: "LL", value: ll ? `${ll}%` : "" },
+    { label: "PL", value: pl ? `${pl}%` : "" },
+    { label: "PI", value: pi ? `${pi}%` : "" },
+  ], [ll, pl, pi]);
+  useTestReport("atterberg", dataPoints, keyResults);
 
   const exportPDF = () => {
     generateTestPDF({

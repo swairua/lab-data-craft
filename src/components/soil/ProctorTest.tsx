@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useProject } from "@/context/ProjectContext";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts";
+import { useTestReport } from "@/hooks/useTestReport";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
 
@@ -34,6 +35,13 @@ const ProctorTest = () => {
   }, [chartData]);
 
   const chartConfig = { dryDensity: { label: "Dry Density (kg/m³)", color: "hsl(var(--primary))" } };
+
+  const filledRows = rows.filter(r => r.moisture && r.dryDensity).length;
+  const proctorResults = useMemo(() => [
+    { label: "OMC", value: optimum ? `${optimum.moisture}%` : "" },
+    { label: "MDD", value: optimum ? `${optimum.dryDensity} kg/m³` : "" },
+  ], [optimum]);
+  useTestReport("proctor", filledRows, proctorResults);
 
   const update = (i: number, field: keyof Row, val: string) => {
     const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next);

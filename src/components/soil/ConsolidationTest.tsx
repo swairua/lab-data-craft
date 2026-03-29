@@ -9,6 +9,7 @@ import { generateTestCSV } from "@/lib/csvExporter";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Label } from "@/components/ui/label";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { time: string; settlement: string }
 
@@ -26,6 +27,13 @@ const ConsolidationTest = () => {
   );
 
   const chartConfig = { settlement: { label: "Settlement (mm)", color: "hsl(var(--primary))" } };
+
+  const filledConsol = rows.filter(r => r.time && r.settlement).length;
+  const consolResults = useMemo(() => {
+    const maxSettlement = chartData.length ? Math.max(...chartData.map(d => d.settlement)) : 0;
+    return [{ label: "Max Settlement", value: maxSettlement ? `${maxSettlement.toFixed(2)} mm` : "" }];
+  }, [chartData]);
+  useTestReport("consolidation", filledConsol, consolResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "Consolidation Test", ...project, tables: [{ headers: ["Time (min)", "Settlement (mm)"], rows: rows.map(r => [r.time || "—", r.settlement || "—"]) }] });

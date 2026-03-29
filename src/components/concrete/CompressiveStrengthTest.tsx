@@ -10,6 +10,7 @@ import { generateTestCSV } from "@/lib/csvExporter";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Label } from "@/components/ui/label";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { cubeId: string; load: string; width: string; height: string }
 
@@ -37,6 +38,14 @@ const CompressiveStrengthTest = () => {
   );
 
   const chartConfig = { strength: { label: "Strength (MPa)", color: "hsl(var(--primary))" } };
+
+  const strengths = rows.map(r => parseFloat(getStrength(r))).filter(Boolean);
+  const avgStrength = strengths.length ? (strengths.reduce((a, b) => a + b, 0) / strengths.length).toFixed(2) : "";
+  const compResults = useMemo(() => [
+    { label: "Avg Strength", value: avgStrength ? `${avgStrength} MPa` : "" },
+    { label: "Cubes Tested", value: strengths.length ? String(strengths.length) : "" },
+  ], [avgStrength, strengths.length]);
+  useTestReport("compressive", strengths.length, compResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "Compressive Strength (Cube Test)", ...project, tables: [{ headers: ["Cube ID", "Load (kN)", "Width (mm)", "Height (mm)", "Strength (MPa)"], rows: rows.map(r => [r.cubeId, r.load || "—", r.width, r.height, getStrength(r) || "—"]) }] });

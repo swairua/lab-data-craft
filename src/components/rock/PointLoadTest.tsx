@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { sampleId: string; failureLoad: string; de: string }
 
@@ -16,6 +17,13 @@ const PointLoadTest = () => {
 
   const getIndex = (row: Row) => { const p = parseFloat(row.failureLoad); const de = parseFloat(row.de); if (!p || !de) return ""; return ((p * 1000) / (de * de)).toFixed(3); };
   const update = (i: number, field: keyof Row, val: string) => { const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next); };
+
+  const indices = rows.map(r => parseFloat(getIndex(r))).filter(Boolean);
+  const avgIndex = indices.length ? (indices.reduce((a, b) => a + b, 0) / indices.length).toFixed(3) : "";
+  const plResults = useMemo(() => [
+    { label: "Avg Is(50)", value: avgIndex ? `${avgIndex} MPa` : "" },
+  ], [avgIndex]);
+  useTestReport("pointload", indices.length, plResults);
 
   const exportPDF = () => {
     generateTestPDF({ title: "Point Load Test", ...project, tables: [{ headers: ["Sample ID", "Failure Load (kN)", "De (mm)", "Is(50) (MPa)"], rows: rows.map(r => [r.sampleId, r.failureLoad || "—", r.de || "—", getIndex(r) || "—"]) }] });
