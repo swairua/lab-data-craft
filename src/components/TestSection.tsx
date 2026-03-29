@@ -14,7 +14,7 @@ interface TestSectionProps {
 }
 
 const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV }: TestSectionProps) => {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <Card className="shadow-sm">
