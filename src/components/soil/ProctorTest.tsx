@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Plus, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProject } from "@/context/ProjectContext";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
 
@@ -17,6 +19,21 @@ const ProctorTest = () => {
   const [rows, setRows] = useState<Row[]>([
     { moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },
   ]);
+
+  const chartData = useMemo(() =>
+    rows
+      .filter(r => r.moisture && r.dryDensity)
+      .map(r => ({ moisture: parseFloat(r.moisture), dryDensity: parseFloat(r.dryDensity) }))
+      .sort((a, b) => a.moisture - b.moisture),
+    [rows]
+  );
+
+  const optimum = useMemo(() => {
+    if (!chartData.length) return null;
+    return chartData.reduce((max, pt) => pt.dryDensity > max.dryDensity ? pt : max, chartData[0]);
+  }, [chartData]);
+
+  const chartConfig = { dryDensity: { label: "Dry Density (kg/m³)", color: "hsl(var(--primary))" } };
 
   const update = (i: number, field: keyof Row, val: string) => {
     const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next);
@@ -61,6 +78,30 @@ const ProctorTest = () => {
         </table>
       </div>
       <Button variant="outline" size="sm" className="mt-3" onClick={() => setRows([...rows, { moisture: "", dryDensity: "" }])}><Plus className="h-3.5 w-3.5 mr-1" /> Add Point</Button>
+
+      {chartData.length >= 2 && (
+        <div className="mt-6">
+          <Label className="text-xs text-muted-foreground mb-2 block">Proctor Curve</Label>
+          <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="moisture" type="number" domain={["dataMin - 1", "dataMax + 1"]} label={{ value: "Moisture Content (%)", position: "insideBottom", offset: -10, className: "fill-muted-foreground text-xs" }} />
+              <YAxis type="number" domain={["dataMin - 20", "dataMax + 20"]} label={{ value: "Dry Density (kg/m³)", angle: -90, position: "insideLeft", offset: 5, className: "fill-muted-foreground text-xs" }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line type="monotone" dataKey="dryDensity" name="dryDensity" stroke="var(--color-dryDensity)" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              {optimum && (
+                <ReferenceLine x={optimum.moisture} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: `OMC: ${optimum.moisture}%`, position: "top", className: "fill-destructive text-xs" }} />
+              )}
+            </LineChart>
+          </ChartContainer>
+          {optimum && (
+            <div className="mt-2 flex gap-4 text-sm">
+              <span className="text-muted-foreground">Optimum Moisture Content: <strong className="text-foreground">{optimum.moisture}%</strong></span>
+              <span className="text-muted-foreground">Max Dry Density: <strong className="text-foreground">{optimum.dryDensity} kg/m³</strong></span>
+            </div>
+          )}
+        </div>
+      )}
     </TestSection>
   );
 };
