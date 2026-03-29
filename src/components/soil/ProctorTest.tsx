@@ -20,6 +20,21 @@ const ProctorTest = () => {
     { moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },{ moisture: "", dryDensity: "" },
   ]);
 
+  const chartData = useMemo(() =>
+    rows
+      .filter(r => r.moisture && r.dryDensity)
+      .map(r => ({ moisture: parseFloat(r.moisture), dryDensity: parseFloat(r.dryDensity) }))
+      .sort((a, b) => a.moisture - b.moisture),
+    [rows]
+  );
+
+  const optimum = useMemo(() => {
+    if (!chartData.length) return null;
+    return chartData.reduce((max, pt) => pt.dryDensity > max.dryDensity ? pt : max, chartData[0]);
+  }, [chartData]);
+
+  const chartConfig = { dryDensity: { label: "Dry Density (kg/m³)", color: "hsl(var(--primary))" } };
+
   const update = (i: number, field: keyof Row, val: string) => {
     const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next);
   };
