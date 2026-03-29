@@ -9,6 +9,7 @@ import { generateTestCSV } from "@/lib/csvExporter";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Line } from "recharts";
 import { Label } from "@/components/ui/label";
+import { useTestReport } from "@/hooks/useTestReport";
 
 interface Row { normalStress: string; shearStress: string }
 
