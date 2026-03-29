@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,9 @@ import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Label } from "@/components/ui/label";
 
 interface Row {
   sieveSize: string;
@@ -49,6 +52,21 @@ const GradingTest = () => {
     next[i] = { ...next[i], [field]: val };
     setRows(next);
   };
+
+  const chartData = useMemo(() => {
+    if (totalWeight === 0) return [];
+    return rows
+      .filter(r => r.sieveSize !== "Pan" && parseFloat(r.sieveSize) > 0)
+      .map((r, _origIdx) => {
+        const idx = rows.indexOf(r);
+        const pp = getPercentPassing(idx);
+        return pp ? { sieveSize: parseFloat(r.sieveSize), percentPassing: parseFloat(pp) } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a!.sieveSize - b!.sieveSize) as { sieveSize: number; percentPassing: number }[];
+  }, [rows, totalWeight]);
+
+  const chartConfig = { percentPassing: { label: "% Passing", color: "hsl(var(--primary))" } };
 
   const exportPDF = () => {
     generateTestPDF({
@@ -98,6 +116,28 @@ const GradingTest = () => {
       <Button variant="outline" size="sm" className="mt-3" onClick={() => setRows([...rows, { sieveSize: "", weightRetained: "" }])}>
         <Plus className="h-3.5 w-3.5 mr-1" /> Add Row
       </Button>
+
+      {chartData.length >= 2 && (
+        <div className="mt-6">
+          <Label className="text-xs text-muted-foreground mb-2 block">Particle Size Distribution Curve</Label>
+          <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="sieveSize"
+                type="number"
+                scale="log"
+                domain={["dataMin", "dataMax"]}
+                tickFormatter={(v) => String(v)}
+                label={{ value: "Sieve Size (mm)", position: "insideBottom", offset: -10, className: "fill-muted-foreground text-xs" }}
+              />
+              <YAxis type="number" domain={[0, 100]} label={{ value: "% Passing", angle: -90, position: "insideLeft", offset: 5, className: "fill-muted-foreground text-xs" }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line type="monotone" dataKey="percentPassing" name="percentPassing" stroke="var(--color-percentPassing)" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
+          </ChartContainer>
+        </div>
+      )}
     </TestSection>
   );
 };
