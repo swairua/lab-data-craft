@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,9 @@ import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Label } from "@/components/ui/label";
 
 interface Row { cubeId: string; load: string; width: string; height: string }
 
@@ -25,6 +28,15 @@ const CompressiveStrengthTest = () => {
   };
 
   const update = (i: number, field: keyof Row, val: string) => { const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next); };
+
+  const chartData = useMemo(() =>
+    rows
+      .filter(r => getStrength(r))
+      .map(r => ({ name: r.cubeId || "—", strength: parseFloat(getStrength(r)) })),
+    [rows]
+  );
+
+  const chartConfig = { strength: { label: "Strength (MPa)", color: "hsl(var(--primary))" } };
 
   const exportPDF = () => {
     generateTestPDF({ title: "Compressive Strength (Cube Test)", ...project, tables: [{ headers: ["Cube ID", "Load (kN)", "Width (mm)", "Height (mm)", "Strength (MPa)"], rows: rows.map(r => [r.cubeId, r.load || "—", r.width, r.height, getStrength(r) || "—"]) }] });
@@ -50,6 +62,21 @@ const CompressiveStrengthTest = () => {
         </table>
       </div>
       <Button variant="outline" size="sm" className="mt-3" onClick={() => setRows([...rows, { cubeId: `C${rows.length + 1}`, load: "", width: "150", height: "150" }])}><Plus className="h-3.5 w-3.5 mr-1" /> Add Row</Button>
+
+      {chartData.length >= 1 && (
+        <div className="mt-6">
+          <Label className="text-xs text-muted-foreground mb-2 block">Cube Compressive Strengths</Label>
+          <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" label={{ value: "Cube ID", position: "insideBottom", offset: -10, className: "fill-muted-foreground text-xs" }} />
+              <YAxis domain={[0, "dataMax + 5"]} label={{ value: "Strength (MPa)", angle: -90, position: "insideLeft", offset: 5, className: "fill-muted-foreground text-xs" }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="strength" name="strength" fill="var(--color-strength)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        </div>
+      )}
     </TestSection>
   );
 };

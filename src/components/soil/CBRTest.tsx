@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,9 @@ import { Plus, X } from "lucide-react";
 import { useProject } from "@/context/ProjectContext";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Label } from "@/components/ui/label";
 
 const STANDARD_LOAD_2_5 = 13.24;
 const STANDARD_LOAD_5_0 = 19.96;
@@ -29,6 +32,16 @@ const CBRTest = () => {
   };
 
   const update = (i: number, field: keyof Row, val: string) => { const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next); };
+
+  const chartData = useMemo(() =>
+    rows
+      .filter(r => r.penetration && r.load)
+      .map(r => ({ penetration: parseFloat(r.penetration), load: parseFloat(r.load) }))
+      .sort((a, b) => a.penetration - b.penetration),
+    [rows]
+  );
+
+  const chartConfig = { load: { label: "Load (kN)", color: "hsl(var(--primary))" } };
 
   const exportPDF = () => {
     generateTestPDF({
@@ -55,6 +68,21 @@ const CBRTest = () => {
         </table>
       </div>
       <Button variant="outline" size="sm" className="mt-3" onClick={() => setRows([...rows, { penetration: "", load: "" }])}><Plus className="h-3.5 w-3.5 mr-1" /> Add Row</Button>
+
+      {chartData.length >= 2 && (
+        <div className="mt-6">
+          <Label className="text-xs text-muted-foreground mb-2 block">Penetration vs Load Curve</Label>
+          <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="penetration" type="number" domain={["dataMin", "dataMax"]} label={{ value: "Penetration (mm)", position: "insideBottom", offset: -10, className: "fill-muted-foreground text-xs" }} />
+              <YAxis type="number" domain={[0, "dataMax + 1"]} label={{ value: "Load (kN)", angle: -90, position: "insideLeft", offset: 5, className: "fill-muted-foreground text-xs" }} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line type="monotone" dataKey="load" name="load" stroke="var(--color-load)" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
+          </ChartContainer>
+        </div>
+      )}
     </TestSection>
   );
 };
