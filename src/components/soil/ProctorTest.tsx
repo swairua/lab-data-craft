@@ -36,6 +36,13 @@ const ProctorTest = () => {
 
   const chartConfig = { dryDensity: { label: "Dry Density (kg/m³)", color: "hsl(var(--primary))" } };
 
+  const filledRows = rows.filter(r => r.moisture && r.dryDensity).length;
+  const proctorResults = useMemo(() => [
+    { label: "OMC", value: optimum ? `${optimum.moisture}%` : "" },
+    { label: "MDD", value: optimum ? `${optimum.dryDensity} kg/m³` : "" },
+  ], [optimum]);
+  useTestReport("proctor", filledRows, proctorResults);
+
   const update = (i: number, field: keyof Row, val: string) => {
     const next = [...rows]; next[i] = { ...next[i], [field]: val }; setRows(next);
   };
