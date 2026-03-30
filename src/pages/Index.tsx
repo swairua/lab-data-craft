@@ -126,6 +126,10 @@ const Index = ({ initialTab }: IndexProps) => {
               </TabsContent>
 
               <TabsContent value="concrete" className="space-y-4">
+                <UPVTTest />
+                <SchmidtHammerTest />
+                <CoringTest />
+                <ConcreteCubesTest />
                 <SlumpTest />
                 <CompressiveStrengthTest />
               </TabsContent>
