@@ -16,6 +16,10 @@ import ConsolidationTest from "@/components/soil/ConsolidationTest";
 
 import SlumpTest from "@/components/concrete/SlumpTest";
 import CompressiveStrengthTest from "@/components/concrete/CompressiveStrengthTest";
+import UPVTTest from "@/components/concrete/UPVTTest";
+import SchmidtHammerTest from "@/components/concrete/SchmidtHammerTest";
+import CoringTest from "@/components/concrete/CoringTest";
+import ConcreteCubesTest from "@/components/concrete/ConcreteCubesTest";
 
 import UCSTest from "@/components/rock/UCSTest";
 import PointLoadTest from "@/components/rock/PointLoadTest";
