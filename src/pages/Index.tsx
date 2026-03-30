@@ -76,6 +76,14 @@ const Index = ({ initialTab }: IndexProps) => {
                 >
                   <FlaskConical className="h-4 w-4" /> Tests
                 </Button>
+                <Button
+                  variant={view === "reports" ? "default" : "outline"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => { setView("reports"); navigate("/reports"); }}
+                >
+                  <FileText className="h-4 w-4" /> Reports
+                </Button>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
