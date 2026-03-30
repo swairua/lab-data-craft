@@ -5,7 +5,7 @@ import { ProjectContext } from "@/context/ProjectContext";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { FlaskConical, Mountain, Hammer, TestTubeDiagonal, LayoutDashboard, ArrowLeft } from "lucide-react";
+import { FlaskConical, Mountain, Hammer, TestTubeDiagonal, LayoutDashboard, FileText } from "lucide-react";
 
 import GradingTest from "@/components/soil/GradingTest";
 import AtterbergTest from "@/components/soil/AtterbergTest";
@@ -29,7 +29,7 @@ import SPTTest from "@/components/special/SPTTest";
 import DCPTest from "@/components/special/DCPTest";
 
 import Dashboard from "@/pages/Dashboard";
-
+import Reports from "@/pages/Reports";
 interface IndexProps {
   initialTab?: string;
 }
@@ -38,7 +38,10 @@ const Index = ({ initialTab }: IndexProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const isTestsPage = location.pathname === "/tests";
-  const [view, setView] = useState<"dashboard" | "tests">(isTestsPage ? "tests" : "dashboard");
+  const isReportsPage = location.pathname === "/reports";
+  const [view, setView] = useState<"dashboard" | "tests" | "reports">(
+    isReportsPage ? "reports" : isTestsPage ? "tests" : "dashboard"
+  );
   const [projectName, setProjectName] = useState("");
   const [clientName, setClientName] = useState("");
   const today = new Date().toISOString().split("T")[0];
@@ -76,6 +79,14 @@ const Index = ({ initialTab }: IndexProps) => {
                 >
                   <FlaskConical className="h-4 w-4" /> Tests
                 </Button>
+                <Button
+                  variant={view === "reports" ? "default" : "outline"}
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => { setView("reports"); navigate("/reports"); }}
+                >
+                  <FileText className="h-4 w-4" /> Reports
+                </Button>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -99,6 +110,8 @@ const Index = ({ initialTab }: IndexProps) => {
         <main className="container max-w-6xl mx-auto px-4 py-6">
           {view === "dashboard" ? (
             <Dashboard />
+          ) : view === "reports" ? (
+            <Reports />
           ) : (
             <Tabs defaultValue={initialTab || "soil"} className="w-full">
               <TabsList className="w-full grid grid-cols-4 mb-6 h-11">
