@@ -110,6 +110,8 @@ const Index = ({ initialTab }: IndexProps) => {
         <main className="container max-w-6xl mx-auto px-4 py-6">
           {view === "dashboard" ? (
             <Dashboard />
+          ) : view === "reports" ? (
+            <Reports />
           ) : (
             <Tabs defaultValue={initialTab || "soil"} className="w-full">
               <TabsList className="w-full grid grid-cols-4 mb-6 h-11">
