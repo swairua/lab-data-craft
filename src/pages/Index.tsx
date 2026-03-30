@@ -29,7 +29,7 @@ import SPTTest from "@/components/special/SPTTest";
 import DCPTest from "@/components/special/DCPTest";
 
 import Dashboard from "@/pages/Dashboard";
-
+import Reports from "@/pages/Reports";
 interface IndexProps {
   initialTab?: string;
 }
