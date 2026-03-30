@@ -38,7 +38,10 @@ const Index = ({ initialTab }: IndexProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const isTestsPage = location.pathname === "/tests";
-  const [view, setView] = useState<"dashboard" | "tests">(isTestsPage ? "tests" : "dashboard");
+  const isReportsPage = location.pathname === "/reports";
+  const [view, setView] = useState<"dashboard" | "tests" | "reports">(
+    isReportsPage ? "reports" : isTestsPage ? "tests" : "dashboard"
+  );
   const [projectName, setProjectName] = useState("");
   const [clientName, setClientName] = useState("");
   const today = new Date().toISOString().split("T")[0];
