@@ -179,10 +179,9 @@ try {
 
         // GET /reports/summary?project_id={id}
         if ($method === 'GET' && ($segments[1] ?? '') === 'summary') {
-            $project = $db->prepare("SELECT * FROM projects WHERE id = ?")->execute([$projectId]);
-            $project = $db->prepare("SELECT * FROM projects WHERE id = ?");
-            $project->execute([$projectId]);
-            $project = $project->fetch();
+            $stmt = $db->prepare("SELECT * FROM projects WHERE id = ?");
+            $stmt->execute([$projectId]);
+            $project = $stmt->fetch();
             if (!$project) jsonError('Project not found', 404);
 
             $tests = $db->prepare("

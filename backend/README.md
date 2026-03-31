@@ -44,6 +44,23 @@
 | GET | `/reports/summary?project_id={id}` | Project summary with stats |
 | GET | `/reports/dashboard?project_id={id}` | Dashboard data grouped by category |
 
+### Auth (Not Implemented — routes defined in `auth.php`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Create user account |
+| POST | `/auth/login` | Login, receive session token |
+| POST | `/auth/logout` | Invalidate session |
+| POST | `/auth/forgot` | Request password reset |
+| POST | `/auth/reset` | Reset password with token |
+| GET | `/auth/me` | Get current user info |
+
+### Database Tables
+- `users` — email, password_hash, full_name, role (admin/user/viewer)
+- `password_resets` — token-based password reset with expiry
+- `sessions` — server-side session tracking
+- `projects` — now linked to users via `user_id` FK
+- `tests`, `test_results`, `test_data` — test data storage
+
 ## Request Examples
 
 ```bash
