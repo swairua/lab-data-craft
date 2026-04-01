@@ -11,9 +11,28 @@ export interface TestSummary {
   keyResults: { label: string; value: string }[];
 }
 
+// Atterberg Limits specific types
+export interface AtterbergRow {
+  depth: string;
+  ll: string;
+  pl: string;
+}
+
+export interface AtterbergInstance {
+  boreholeId: string;
+  rows: AtterbergRow[];
+}
+
 interface TestDataContextType {
   tests: Record<string, TestSummary>;
   updateTest: (id: string, data: Partial<Omit<TestSummary, "id">>) => void;
+  atterbergTests: AtterbergInstance[];
+  addAtterbergInstance: (boreholeId: string) => void;
+  removeAtterbergInstance: (boreholeId: string) => void;
+  addAtterbergRow: (boreholeId: string) => void;
+  removeAtterbergRow: (boreholeId: string, rowIndex: number) => void;
+  updateAtterbergRow: (boreholeId: string, rowIndex: number, field: keyof AtterbergRow, value: string) => void;
+  updateBoreholeId: (oldId: string, newId: string) => void;
 }
 
 const defaultTests: Record<string, TestSummary> = {
@@ -39,12 +58,20 @@ const defaultTests: Record<string, TestSummary> = {
 const TestDataContext = createContext<TestDataContextType>({
   tests: defaultTests,
   updateTest: () => {},
+  atterbergTests: [],
+  addAtterbergInstance: () => {},
+  removeAtterbergInstance: () => {},
+  addAtterbergRow: () => {},
+  removeAtterbergRow: () => {},
+  updateAtterbergRow: () => {},
+  updateBoreholeId: () => {},
 });
 
 export const useTestData = () => useContext(TestDataContext);
 
 export const TestDataProvider = ({ children }: { children: ReactNode }) => {
   const [tests, setTests] = useState<Record<string, TestSummary>>(defaultTests);
+  const [atterbergTests, setAtterbergTests] = useState<AtterbergInstance[]>([]);
 
   const updateTest = useCallback((id: string, data: Partial<Omit<TestSummary, "id">>) => {
     setTests(prev => ({
@@ -53,8 +80,71 @@ export const TestDataProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
 
+  const addAtterbergInstance = useCallback((boreholeId: string) => {
+    setAtterbergTests(prev => [...prev, { boreholeId, rows: [{ depth: "", ll: "", pl: "" }] }]);
+  }, []);
+
+  const removeAtterbergInstance = useCallback((boreholeId: string) => {
+    setAtterbergTests(prev => prev.filter(instance => instance.boreholeId !== boreholeId));
+  }, []);
+
+  const addAtterbergRow = useCallback((boreholeId: string) => {
+    setAtterbergTests(prev =>
+      prev.map(instance =>
+        instance.boreholeId === boreholeId
+          ? { ...instance, rows: [...instance.rows, { depth: "", ll: "", pl: "" }] }
+          : instance
+      )
+    );
+  }, []);
+
+  const removeAtterbergRow = useCallback((boreholeId: string, rowIndex: number) => {
+    setAtterbergTests(prev =>
+      prev.map(instance =>
+        instance.boreholeId === boreholeId
+          ? { ...instance, rows: instance.rows.filter((_, i) => i !== rowIndex) }
+          : instance
+      )
+    );
+  }, []);
+
+  const updateAtterbergRow = useCallback((boreholeId: string, rowIndex: number, field: keyof AtterbergRow, value: string) => {
+    setAtterbergTests(prev =>
+      prev.map(instance =>
+        instance.boreholeId === boreholeId
+          ? {
+              ...instance,
+              rows: instance.rows.map((row, i) =>
+                i === rowIndex ? { ...row, [field]: value } : row
+              ),
+            }
+          : instance
+      )
+    );
+  }, []);
+
+  const updateBoreholeId = useCallback((oldId: string, newId: string) => {
+    setAtterbergTests(prev =>
+      prev.map(instance =>
+        instance.boreholeId === oldId ? { ...instance, boreholeId: newId } : instance
+      )
+    );
+  }, []);
+
   return (
-    <TestDataContext.Provider value={{ tests, updateTest }}>
+    <TestDataContext.Provider
+      value={{
+        tests,
+        updateTest,
+        atterbergTests,
+        addAtterbergInstance,
+        removeAtterbergInstance,
+        addAtterbergRow,
+        removeAtterbergRow,
+        updateAtterbergRow,
+        updateBoreholeId,
+      }}
+    >
       {children}
     </TestDataContext.Provider>
   );
