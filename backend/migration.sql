@@ -53,10 +53,24 @@ CREATE TABLE IF NOT EXISTS projects (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Tests table
+-- Boreholes table
+CREATE TABLE IF NOT EXISTS boreholes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    depth DECIMAL(10,2) DEFAULT NULL,
+    location VARCHAR(255) DEFAULT '',
+    description TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Tests table (now with optional borehole_id)
 CREATE TABLE IF NOT EXISTS tests (
     id INT AUTO_INCREMENT PRIMARY KEY,
     project_id INT NOT NULL,
+    borehole_id INT NULL,
     test_key VARCHAR(50) NOT NULL,
     name VARCHAR(255) NOT NULL,
     category ENUM('soil', 'concrete', 'rock', 'special') NOT NULL,
@@ -65,7 +79,8 @@ CREATE TABLE IF NOT EXISTS tests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_project_test (project_id, test_key)
+    FOREIGN KEY (borehole_id) REFERENCES boreholes(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_borehole_test (borehole_id, test_key)
 );
 
 -- Test results (key-value pairs per test)
@@ -90,24 +105,49 @@ CREATE TABLE IF NOT EXISTS test_data (
     UNIQUE KEY unique_test_field (test_id, field_name)
 );
 
--- Seed default test definitions
+-- Seed default project with boreholes
 INSERT INTO projects (name) VALUES ('Default Project');
 
-INSERT INTO tests (project_id, test_key, name, category) VALUES
-(1, 'grading', 'Grading (Sieve Analysis)', 'soil'),
-(1, 'atterberg', 'Atterberg Limits', 'soil'),
-(1, 'proctor', 'Proctor Test', 'soil'),
-(1, 'cbr', 'CBR', 'soil'),
-(1, 'shear', 'Shear Test', 'soil'),
-(1, 'consolidation', 'Consolidation', 'soil'),
-(1, 'slump', 'Slump Test', 'concrete'),
-(1, 'compressive', 'Compressive Strength', 'concrete'),
-(1, 'upvt', 'UPVT', 'concrete'),
-(1, 'schmidt', 'Schmidt Hammer', 'concrete'),
-(1, 'coring', 'Coring', 'concrete'),
-(1, 'cubes', 'Concrete Cubes', 'concrete'),
-(1, 'ucs', 'UCS', 'rock'),
-(1, 'pointload', 'Point Load', 'rock'),
-(1, 'porosity', 'Porosity', 'rock'),
-(1, 'spt', 'SPT', 'special'),
-(1, 'dcp', 'DCP', 'special');
+-- Seed two default boreholes for the default project
+INSERT INTO boreholes (project_id, name, depth, location) VALUES
+(1, 'BH-1', 3.00, 'Chainage 0+100'),
+(1, 'BH-2', 5.00, 'Chainage 0+200');
+
+-- Seed default tests for each borehole
+INSERT INTO tests (project_id, borehole_id, test_key, name, category) VALUES
+-- BH-1 tests
+(1, 1, 'grading', 'Grading (Sieve Analysis)', 'soil'),
+(1, 1, 'atterberg', 'Atterberg Limits', 'soil'),
+(1, 1, 'proctor', 'Proctor Test', 'soil'),
+(1, 1, 'cbr', 'CBR', 'soil'),
+(1, 1, 'shear', 'Shear Test', 'soil'),
+(1, 1, 'consolidation', 'Consolidation', 'soil'),
+(1, 1, 'slump', 'Slump Test', 'concrete'),
+(1, 1, 'compressive', 'Compressive Strength', 'concrete'),
+(1, 1, 'upvt', 'UPVT', 'concrete'),
+(1, 1, 'schmidt', 'Schmidt Hammer', 'concrete'),
+(1, 1, 'coring', 'Coring', 'concrete'),
+(1, 1, 'cubes', 'Concrete Cubes', 'concrete'),
+(1, 1, 'ucs', 'UCS', 'rock'),
+(1, 1, 'pointload', 'Point Load', 'rock'),
+(1, 1, 'porosity', 'Porosity', 'rock'),
+(1, 1, 'spt', 'SPT', 'special'),
+(1, 1, 'dcp', 'DCP', 'special'),
+-- BH-2 tests
+(1, 2, 'grading', 'Grading (Sieve Analysis)', 'soil'),
+(1, 2, 'atterberg', 'Atterberg Limits', 'soil'),
+(1, 2, 'proctor', 'Proctor Test', 'soil'),
+(1, 2, 'cbr', 'CBR', 'soil'),
+(1, 2, 'shear', 'Shear Test', 'soil'),
+(1, 2, 'consolidation', 'Consolidation', 'soil'),
+(1, 2, 'slump', 'Slump Test', 'concrete'),
+(1, 2, 'compressive', 'Compressive Strength', 'concrete'),
+(1, 2, 'upvt', 'UPVT', 'concrete'),
+(1, 2, 'schmidt', 'Schmidt Hammer', 'concrete'),
+(1, 2, 'coring', 'Coring', 'concrete'),
+(1, 2, 'cubes', 'Concrete Cubes', 'concrete'),
+(1, 2, 'ucs', 'UCS', 'rock'),
+(1, 2, 'pointload', 'Point Load', 'rock'),
+(1, 2, 'porosity', 'Porosity', 'rock'),
+(1, 2, 'spt', 'SPT', 'special'),
+(1, 2, 'dcp', 'DCP', 'special');
