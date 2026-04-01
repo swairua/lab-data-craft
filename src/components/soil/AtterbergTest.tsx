@@ -21,6 +21,7 @@ const AtterbergTest = () => {
     removeAtterbergRow,
     updateAtterbergRow,
     updateBoreholeId,
+    updateTest,
   } = useTestData();
   const [newBoreholeId, setNewBoreholeId] = useState("");
 
@@ -109,12 +110,26 @@ const AtterbergTest = () => {
     atterbergTests.forEach(instance => {
       removeAtterbergInstance(instance.boreholeId);
     });
+    updateTest("atterberg", {
+      status: "not-started",
+      dataPoints: 0,
+      keyResults: [],
+    });
+  };
+
+  const handleSave = () => {
+    const status = totalDataPoints === 0 ? "not-started" : totalDataPoints > 0 && atterbergTests.length > 0 ? "completed" : "in-progress";
+    updateTest("atterberg", {
+      status,
+      dataPoints: totalDataPoints,
+      keyResults: aggregateResults,
+    });
   };
 
   return (
     <TestSection
       title="Atterberg Limits"
-      onSave={() => {}}
+      onSave={handleSave}
       onClear={handleClearAll}
       onExportPDF={handleExportPDF}
       onExportCSV={handleExportCSV}
