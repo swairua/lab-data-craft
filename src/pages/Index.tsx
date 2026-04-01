@@ -130,8 +130,8 @@ const Index = ({ initialTab }: IndexProps) => {
               </TabsList>
 
               <TabsContent value="soil" className="space-y-4">
-                <GradingTest />
                 <AtterbergTest />
+                <GradingTest />
                 <ProctorTest />
                 <CBRTest />
                 <ShearTest />
