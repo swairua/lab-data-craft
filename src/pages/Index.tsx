@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { FlaskConical, Mountain, Hammer, TestTubeDiagonal, LayoutDashboard, FileText } from "lucide-react";
 
+import BoreholeManager from "@/components/BoreholeManager";
+
 import GradingTest from "@/components/soil/GradingTest";
 import AtterbergTest from "@/components/soil/AtterbergTest";
 import ProctorTest from "@/components/soil/ProctorTest";
@@ -30,6 +32,7 @@ import DCPTest from "@/components/special/DCPTest";
 
 import Dashboard from "@/pages/Dashboard";
 import Reports from "@/pages/Reports";
+
 interface IndexProps {
   initialTab?: string;
 }
@@ -108,6 +111,13 @@ const Index = ({ initialTab }: IndexProps) => {
 
         {/* Main Content */}
         <main className="container max-w-6xl mx-auto px-4 py-6">
+          {/* Borehole Manager — shown on tests and reports views */}
+          {(view === "tests" || view === "reports") && (
+            <div className="mb-6">
+              <BoreholeManager />
+            </div>
+          )}
+
           {view === "dashboard" ? (
             <Dashboard />
           ) : view === "reports" ? (
