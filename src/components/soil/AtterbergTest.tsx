@@ -69,7 +69,7 @@ const AtterbergTest = () => {
     <TestSection
       title={`Atterberg Limits — ${activeBorehole?.name || ""}`}
       onSave={() => {}}
-      onClear={() => setField("ll", "") || setField("pl", "")}
+      onClear={() => { setField("ll", ""); setField("pl", ""); }}
       onExportPDF={exportPDF}
       onExportCSV={() => generateTestCSV(csvData)}
     >
