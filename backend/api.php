@@ -16,6 +16,8 @@ const ALLOWED_TABLES = [
     'projects' => true,
     'test_definitions' => true,
     'test_results' => true,
+    'atterberg_instances' => true,
+    'atterberg_rows' => true,
 ];
 
 function respond(array $payload, int $status = 200): never

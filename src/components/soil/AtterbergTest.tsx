@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import TestSection from "@/components/TestSection";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,8 @@ import { useTestReport } from "@/hooks/useTestReport";
 import { useTestData, type AtterbergInstance, type AtterbergRow } from "@/context/TestDataContext";
 import { Button } from "@/components/ui/button";
 import { Plus, X } from "lucide-react";
+
+const API_BASE = process.env.VITE_API_URL || "http://localhost:8000/backend";
 
 const AtterbergTest = () => {
   const project = useProject();
@@ -24,6 +26,31 @@ const AtterbergTest = () => {
     updateTest,
   } = useTestData();
   const [newBoreholeId, setNewBoreholeId] = useState("");
+  const loadedRef = useRef(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    const saved = localStorage.getItem("atterbergTests");
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        data.forEach((instance: any) => {
+          addAtterbergInstance(instance.boreholeId);
+          instance.rows.forEach((row: any, idx: number) => {
+            if (idx > 0) addAtterbergRow(instance.boreholeId);
+            updateAtterbergRow(instance.boreholeId, idx, "depth", row.depth);
+            updateAtterbergRow(instance.boreholeId, idx, "ll", row.ll);
+            updateAtterbergRow(instance.boreholeId, idx, "pl", row.pl);
+          });
+        });
+      } catch (e) {
+        console.error("Failed to load saved atterberg tests:", e);
+      }
+    }
+  }, [addAtterbergInstance, addAtterbergRow, updateAtterbergRow]);
 
   // Calculate total data points and aggregate results
   const { totalDataPoints, aggregateResults } = useMemo(() => {
@@ -110,6 +137,7 @@ const AtterbergTest = () => {
     atterbergTests.forEach(instance => {
       removeAtterbergInstance(instance.boreholeId);
     });
+    localStorage.removeItem("atterbergTests");
     updateTest("atterberg", {
       status: "not-started",
       dataPoints: 0,
@@ -124,6 +152,9 @@ const AtterbergTest = () => {
       dataPoints: totalDataPoints,
       keyResults: aggregateResults,
     });
+    // Save to localStorage
+    localStorage.setItem("atterbergTests", JSON.stringify(atterbergTests));
+    // TODO: Optionally sync to backend API when projectId is available
   };
 
   return (
