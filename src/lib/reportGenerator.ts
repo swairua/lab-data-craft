@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { TestSummary, TestStatus } from "@/context/TestDataContext";
+import { Borehole } from "@/context/BoreholeContext";
 
 interface ProjectInfo {
   projectName: string;
@@ -28,7 +29,6 @@ function addHeader(doc: jsPDF, title: string, project: ProjectInfo) {
   const pw = doc.internal.pageSize.getWidth();
   let y = 15;
 
-  // Title bar
   doc.setFillColor(...COLORS.primary);
   doc.rect(0, 0, pw, 35, "F");
   doc.setFontSize(18);
@@ -41,7 +41,6 @@ function addHeader(doc: jsPDF, title: string, project: ProjectInfo) {
   doc.text(title, pw / 2, y, { align: "center" });
   y = 42;
 
-  // Project info row
   doc.setTextColor(...COLORS.dark);
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
@@ -89,14 +88,12 @@ export function generateProjectSummaryReport(
   const inProgress = testList.filter(t => t.status === "in-progress").length;
   const notStarted = testList.filter(t => t.status === "not-started").length;
 
-  // Summary stats
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...COLORS.dark);
   doc.text("Overview", 14, y);
   y += 7;
 
-  // Stats boxes
   const boxW = (pw - 28 - 12) / 4;
   const statsData = [
     { label: "Total", value: total, color: COLORS.primary },
@@ -119,7 +116,6 @@ export function generateProjectSummaryReport(
   });
   y += 25;
 
-  // Progress bar
   const progressPct = total ? Math.round((completed / total) * 100) : 0;
   doc.setFillColor(...COLORS.border);
   doc.roundedRect(14, y, pw - 28, 5, 2, 2, "F");
@@ -132,7 +128,6 @@ export function generateProjectSummaryReport(
   doc.text(`${progressPct}% Complete`, pw / 2, y + 11, { align: "center" });
   y += 17;
 
-  // Category breakdown
   const categories = [
     { key: "soil", label: "Soil Tests" },
     { key: "concrete", label: "Concrete Tests" },
@@ -219,6 +214,117 @@ export function generateDashboardReport(
 
   addFooter(doc);
   doc.save(`Dashboard_Export.pdf`);
+}
+
+// ──────────── BOREHOLE REPORT ────────────
+export function generateBoreholeReport(
+  project: ProjectInfo,
+  borehole: Borehole,
+  tests: Record<string, TestSummary>
+) {
+  const doc = new jsPDF();
+  const pw = doc.internal.pageSize.getWidth();
+  let y = addHeader(doc, `Borehole Report — ${borehole.name}`, project);
+
+  // Borehole info
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...COLORS.dark);
+  doc.text("Borehole Details", 14, y);
+  y += 6;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Name: ${borehole.name}`, 14, y);
+  doc.text(`Depth: ${borehole.depth || "—"} m`, pw / 3, y);
+  doc.text(`Location: ${borehole.location || "—"}`, (pw / 3) * 2, y);
+  y += 8;
+
+  const testList = Object.values(tests);
+  const testsWithData = testList.filter(t => t.dataPoints > 0);
+
+  if (testsWithData.length === 0) {
+    doc.setTextColor(...COLORS.muted);
+    doc.text("No test data recorded for this borehole.", 14, y);
+  } else {
+    const rows = testsWithData.map(t => [
+      t.name,
+      t.category.charAt(0).toUpperCase() + t.category.slice(1),
+      statusLabels[t.status],
+      t.keyResults.map(r => `${r.label}: ${r.value}`).join("; ") || "—",
+    ]);
+
+    (doc as any).autoTable({
+      startY: y,
+      head: [["Test", "Category", "Status", "Results"]],
+      body: rows,
+      theme: "grid",
+      headStyles: { fillColor: COLORS.primary, textColor: 255, fontStyle: "bold", fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      margin: { left: 14, right: 14 },
+      styles: { cellPadding: 2.5 },
+    });
+  }
+
+  addFooter(doc);
+  doc.save(`Borehole_${borehole.name}_Report.pdf`);
+}
+
+// ──────────── COMBINED REPORT ────────────
+export function generateCombinedReport(
+  project: ProjectInfo,
+  boreholeData: { borehole: Borehole; tests: Record<string, TestSummary> }[]
+) {
+  const doc = new jsPDF({ orientation: "landscape" });
+  let y = addHeader(doc, "Combined Borehole Report", project);
+
+  // Collect all unique test names that have data in at least one borehole
+  const testKeySet = new Set<string>();
+  const testNameMap: Record<string, string> = {};
+  for (const bd of boreholeData) {
+    for (const [key, t] of Object.entries(bd.tests)) {
+      if (t.dataPoints > 0) {
+        testKeySet.add(key);
+        testNameMap[key] = t.name;
+      }
+    }
+  }
+
+  const testKeysArr = Array.from(testKeySet);
+  if (testKeysArr.length === 0) {
+    doc.setFontSize(10);
+    doc.setTextColor(...COLORS.muted);
+    doc.text("No test data recorded in any borehole.", 14, y);
+  } else {
+    // Build comparison table: rows = tests, columns = boreholes
+    const head = ["Test", ...boreholeData.map(bd => bd.borehole.name)];
+    const body = testKeysArr.map(key => {
+      const row: string[] = [testNameMap[key]];
+      for (const bd of boreholeData) {
+        const t = bd.tests[key];
+        if (t && t.dataPoints > 0) {
+          row.push(t.keyResults.map(r => `${r.label}: ${r.value}`).join("; ") || "—");
+        } else {
+          row.push("—");
+        }
+      }
+      return row;
+    });
+
+    (doc as any).autoTable({
+      startY: y,
+      head: [head],
+      body,
+      theme: "grid",
+      headStyles: { fillColor: COLORS.primary, textColor: 255, fontStyle: "bold", fontSize: 8 },
+      bodyStyles: { fontSize: 7.5 },
+      columnStyles: { 0: { cellWidth: 45, fontStyle: "bold" } },
+      margin: { left: 14, right: 14 },
+      styles: { cellPadding: 2.5 },
+    });
+  }
+
+  addFooter(doc);
+  doc.save(`Combined_Borehole_Report.pdf`);
 }
 
 // ──────────── CSV EXPORTS ────────────

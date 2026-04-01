@@ -1,56 +1,115 @@
 import { useTestData } from "@/context/TestDataContext";
+import { useBorehole } from "@/context/BoreholeContext";
 import { useProject } from "@/context/ProjectContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   FileDown, FileSpreadsheet, FileText, LayoutDashboard,
-  ClipboardList, BarChart3,
+  ClipboardList, BarChart3, Layers,
 } from "lucide-react";
 import {
   generateProjectSummaryReport,
   generateDashboardReport,
   generateProjectSummaryCSV,
+  generateBoreholeReport,
+  generateCombinedReport,
 } from "@/lib/reportGenerator";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import { generateTestCSV } from "@/lib/csvExporter";
 import { toast } from "sonner";
 
 const Reports = () => {
-  const { tests } = useTestData();
+  const { getBoreholeTests, tests } = useTestData();
+  const { boreholes, activeBoreholeId } = useBorehole();
   const project = useProject();
-  const testList = Object.values(tests);
+
+  const activeTests = getBoreholeTests(activeBoreholeId);
+  const testList = Object.values(activeTests);
   const testsWithData = testList.filter(t => t.dataPoints > 0);
+  const activeBorehole = boreholes.find(b => b.id === activeBoreholeId);
 
   const handleSummaryPDF = () => {
-    generateProjectSummaryReport(project, tests);
+    generateProjectSummaryReport(project, activeTests);
     toast.success("Project summary report downloaded");
   };
 
   const handleSummaryCSV = () => {
-    generateProjectSummaryCSV(project, tests);
+    generateProjectSummaryCSV(project, activeTests);
     toast.success("Project summary CSV downloaded");
   };
 
   const handleDashboardPDF = () => {
-    generateDashboardReport(project, tests);
+    generateDashboardReport(project, activeTests);
     toast.success("Dashboard export downloaded");
+  };
+
+  const handleBoreholePDF = () => {
+    generateBoreholeReport(project, activeBorehole!, activeTests);
+    toast.success(`${activeBorehole?.name} report downloaded`);
+  };
+
+  const handleCombinedPDF = () => {
+    const allBoreholeData = boreholes.map(bh => ({
+      borehole: bh,
+      tests: getBoreholeTests(bh.id),
+    }));
+    generateCombinedReport(project, allBoreholeData);
+    toast.success("Combined report downloaded");
   };
 
   return (
     <div className="space-y-6">
       {/* Report Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-primary" />
-              Project Summary Report
+              Borehole Report
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-xs text-muted-foreground mb-3">
-              Comprehensive report with all test categories, statuses, and key results.
+              Report for <span className="font-semibold text-foreground">{activeBorehole?.name}</span> with all test results.
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleBoreholePDF} className="gap-1.5">
+                <FileDown className="h-3.5 w-3.5" /> PDF
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow border-primary/20">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              Combined Report
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <p className="text-xs text-muted-foreground mb-3">
+              All {boreholes.length} borehole{boreholes.length !== 1 ? "s" : ""} side-by-side comparison.
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleCombinedPDF} className="gap-1.5">
+                <FileDown className="h-3.5 w-3.5" /> PDF
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <LayoutDashboard className="h-4 w-4 text-primary" />
+              Project Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <p className="text-xs text-muted-foreground mb-3">
+              Comprehensive report with statuses and key results.
             </p>
             <div className="flex gap-2">
               <Button size="sm" onClick={handleSummaryPDF} className="gap-1.5">
@@ -66,32 +125,13 @@ const Reports = () => {
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <LayoutDashboard className="h-4 w-4 text-primary" />
-              Dashboard Export
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-3">
-              Export the full dashboard view with all tests, statuses, and data points.
-            </p>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleDashboardPDF} className="gap-1.5">
-                <FileDown className="h-3.5 w-3.5" /> PDF
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
               <ClipboardList className="h-4 w-4 text-primary" />
-              Individual Test Reports
+              Individual Tests
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-xs text-muted-foreground mb-3">
-              Download reports for specific tests with recorded data below.
+              Download reports for specific tests below.
             </p>
             <Badge variant="secondary" className="text-xs">
               {testsWithData.length} test{testsWithData.length !== 1 ? "s" : ""} with data
@@ -104,12 +144,12 @@ const Reports = () => {
       <div>
         <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
-          Individual Test Reports
+          Individual Test Reports — {activeBorehole?.name}
         </h2>
         {testsWithData.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">No tests have recorded data yet. Enter data in the Tests tab to generate individual reports.</p>
+              <p className="text-sm text-muted-foreground">No tests have recorded data for {activeBorehole?.name} yet. Enter data in the Tests tab to generate individual reports.</p>
             </CardContent>
           </Card>
         ) : (
@@ -138,7 +178,7 @@ const Reports = () => {
                       className="h-7 text-xs gap-1"
                       onClick={() => {
                         generateTestPDF({
-                          title: test.name,
+                          title: `${test.name} — ${activeBorehole?.name}`,
                           ...project,
                           fields: test.keyResults.map(r => ({ label: r.label, value: r.value })),
                         });
@@ -153,7 +193,7 @@ const Reports = () => {
                       className="h-7 text-xs gap-1"
                       onClick={() => {
                         generateTestCSV({
-                          title: test.name,
+                          title: `${test.name} — ${activeBorehole?.name}`,
                           ...project,
                           fields: test.keyResults.map(r => ({ label: r.label, value: r.value })),
                         });
