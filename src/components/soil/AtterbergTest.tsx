@@ -11,8 +11,6 @@ import { useTestData, type AtterbergInstance, type AtterbergRow } from "@/contex
 import { Button } from "@/components/ui/button";
 import { Plus, X } from "lucide-react";
 
-const API_BASE = process.env.VITE_API_URL || "http://localhost:8000/backend";
-
 const AtterbergTest = () => {
   const project = useProject();
   const {
