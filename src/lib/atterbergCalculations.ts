@@ -232,6 +232,75 @@ export const deriveAtterbergStatus = (dataPoints: number, completedTests: number
   return "in-progress";
 };
 
+/**
+ * Get validation errors for a test with helpful messages
+ */
+export const getTestValidationMessages = (test: AtterbergTest): { errors: string[]; warnings: string[] } => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const validTrialsCount = countValidTrials(test);
+
+  if (validTrialsCount === 0) {
+    errors.push(`No valid trials entered for ${test.title}`);
+  } else if (validTrialsCount === 1) {
+    warnings.push(`Only 1 valid trial - recommend at least 2 trials for ${test.title}`);
+  }
+
+  // Test type specific validation
+  if (test.type === "liquidLimit") {
+    const validTrials = getValidLiquidLimitTrials(test.trials);
+    const blowsValues = validTrials.map((t) => t.blows);
+    const minBlows = Math.min(...blowsValues);
+    const maxBlows = Math.max(...blowsValues);
+
+    if (validTrialsCount > 0 && Math.abs(maxBlows - minBlows) < 5) {
+      warnings.push("Blow count range is narrow - recommend wider range for better interpolation");
+    }
+  }
+
+  if (test.type === "plasticLimit") {
+    if (validTrialsCount < 2) {
+      errors.push("At least 2 trials are required to calculate Plastic Limit");
+    }
+  }
+
+  if (test.type === "shrinkageLimit") {
+    const validTrials = getValidShrinkageLimitTrials(test.trials);
+    if (validTrialsCount > 0 && validTrials.some((t) => t.initialVolume <= 0 || t.finalVolume <= 0)) {
+      errors.push("Volume values must be positive numbers");
+    }
+  }
+
+  return { errors, warnings };
+};
+
+/**
+ * Get validation messages for a record
+ */
+export const getRecordValidationMessages = (record: AtterbergRecord): { errors: string[]; info: string[] } => {
+  const errors: string[] = [];
+  const info: string[] = [];
+
+  if (record.tests.length === 0) {
+    info.push("No tests added yet. Click 'Add Test' to begin.");
+  }
+
+  const completedTests = countCompletedTests(record);
+  const totalTests = record.tests.length;
+
+  if (totalTests > 0) {
+    info.push(`Progress: ${completedTests}/${totalTests} tests completed`);
+  }
+
+  // Check for non-plastic soil
+  const plasticityIndex = record.results.plasticityIndex;
+  if (plasticityIndex !== undefined && plasticityIndex < 1) {
+    info.push("Soil appears to be non-plastic or nearly non-plastic");
+  }
+
+  return { errors, info };
+};
+
 export const buildAtterbergSummaryFields = (results: CalculatedResults, recordCount: number, totalDataPoints: number) => [
   { label: "Avg LL", value: results.liquidLimit !== undefined ? `${results.liquidLimit}%` : "" },
   { label: "Avg PL", value: results.plasticLimit !== undefined ? `${results.plasticLimit}%` : "" },
