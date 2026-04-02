@@ -36,35 +36,66 @@ const escapeCSV = (val: string) => {
 export const generateTestCSV = (data: CSVData) => {
   const lines: string[] = [];
 
+  // Title and metadata section
   lines.push(escapeCSV(data.title));
   lines.push("");
 
-  if (data.projectName) lines.push(`Project,${escapeCSV(data.projectName)}`);
-  if (data.clientName) lines.push(`Client,${escapeCSV(data.clientName)}`);
-  if (data.labOrganization) lines.push(`Lab,${escapeCSV(data.labOrganization)}`);
-  lines.push(`Date,${escapeCSV(data.date || new Date().toISOString().split("T")[0])}`);
-  if (data.dateReported) lines.push(`Date Reported,${escapeCSV(data.dateReported)}`);
-  if (data.checkedBy) lines.push(`Checked By,${escapeCSV(data.checkedBy)}`);
+  // Header information - organized as key-value pairs
+  const metadata = [
+    { key: "Project", value: data.projectName },
+    { key: "Client", value: data.clientName },
+    { key: "Lab Organization", value: data.labOrganization },
+    { key: "Date Tested", value: data.date || new Date().toISOString().split("T")[0] },
+    { key: "Date Reported", value: data.dateReported },
+    { key: "Checked By", value: data.checkedBy },
+  ];
+
+  for (const { key, value } of metadata) {
+    if (value) {
+      lines.push(`${escapeCSV(key)},${escapeCSV(value)}`);
+    }
+  }
   lines.push("");
 
+  // Results summary section
   if (data.fields && data.fields.length > 0) {
-    lines.push("Results");
+    lines.push("TEST RESULTS SUMMARY");
+    lines.push("");
     for (const field of data.fields) {
       lines.push(`${escapeCSV(field.label)},${escapeCSV(field.value || "-")}`);
     }
     lines.push("");
+    lines.push(""); // Extra blank line for separation
   }
 
-  if (data.tables) {
+  // Detailed measurement data section
+  if (data.tables && data.tables.length > 0) {
+    lines.push("DETAILED MEASUREMENT DATA");
+    lines.push("");
+
     for (const table of data.tables) {
-      if (table.title) lines.push(escapeCSV(table.title));
+      if (table.title) {
+        lines.push(escapeCSV(table.title));
+        lines.push(""); // Blank line before headers
+      }
+
+      // Table headers
       lines.push(table.headers.map(escapeCSV).join(","));
+
+      // Table rows
       for (const row of table.rows) {
         lines.push(row.map((cell) => escapeCSV(cell || "-")).join(","));
       }
+
+      // Section separator
+      lines.push("");
       lines.push("");
     }
   }
+
+  // Add metadata footer
+  lines.push("---");
+  lines.push(`Generated: ${new Date().toLocaleString()}`);
 
   const csvContent = `\uFEFF${lines.join("\r\n")}`;
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });

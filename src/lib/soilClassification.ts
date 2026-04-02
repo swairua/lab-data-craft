@@ -44,6 +44,20 @@ export const classifySoilUSCS = (
 };
 
 const classifyFineGrained = (ll: number | undefined, pi: number | undefined): ClassificationResults => {
+  // Handle non-plastic soils (PI ≈ 0 or undefined)
+  const isNonPlastic = pi === undefined || pi === 0 || pi < 0.5;
+
+  if (isNonPlastic) {
+    return {
+      uscsGroup: "Non-plastic fines",
+      uscsSymbol: "ML",
+      uscsDescription: "Non-plastic silt or fine sand",
+      aashtoGroup: "A-4",
+      aashtoDescription: "Non-plastic silty soil",
+      classification: "fine-grained",
+    };
+  }
+
   // A-line: PI = 0.73(LL - 20)
   const alineValue = ll !== undefined ? 0.73 * (ll - 20) : undefined;
   const aboveLine = pi !== undefined && alineValue !== undefined && pi > alineValue;
@@ -226,29 +240,50 @@ export const classifySoilAASHTO = (
 export const calculatePlasticityChart = (
   liquidLimit: number | undefined,
   plasticityIndex: number | undefined,
-): { classification: string; characteristics: string[] } | null => {
-  if (!liquidLimit || !plasticityIndex) {
+): { classification: string; characteristics: string[]; nonPlastic: boolean } | null => {
+  // Handle missing data
+  if (liquidLimit === undefined) {
     return null;
   }
 
   const characteristics: string[] = [];
+  const isNonPlastic = plasticityIndex === undefined || plasticityIndex === 0 || plasticityIndex < 0.5;
+
+  // Handle non-plastic soils
+  if (isNonPlastic) {
+    characteristics.push("Non-plastic material");
+    if (liquidLimit < 30) {
+      characteristics.push("Low liquid limit");
+    } else if (liquidLimit < 50) {
+      characteristics.push("Intermediate liquid limit");
+    } else {
+      characteristics.push("High liquid limit");
+    }
+    return {
+      classification: "Non-plastic silt or fine-grained soil (ML)",
+      characteristics,
+      nonPlastic: true,
+    };
+  }
+
+  const characteristics_list: string[] = [];
 
   // LL thresholds
   if (liquidLimit < 30) {
-    characteristics.push("Low liquid limit");
+    characteristics_list.push("Low liquid limit");
   } else if (liquidLimit < 50) {
-    characteristics.push("Intermediate liquid limit");
+    characteristics_list.push("Intermediate liquid limit");
   } else {
-    characteristics.push("High liquid limit");
+    characteristics_list.push("High liquid limit");
   }
 
   // PI thresholds
   if (plasticityIndex < 5) {
-    characteristics.push("Low plasticity");
+    characteristics_list.push("Low plasticity");
   } else if (plasticityIndex < 15) {
-    characteristics.push("Medium plasticity");
+    characteristics_list.push("Medium plasticity");
   } else {
-    characteristics.push("High plasticity");
+    characteristics_list.push("High plasticity");
   }
 
   // A-line position
@@ -264,18 +299,21 @@ export const calculatePlasticityChart = (
 
   return {
     classification,
-    characteristics,
+    characteristics: characteristics_list,
+    nonPlastic: false,
   };
 };
 
 /**
  * Validate soil classification requirements
+ * Note: Non-plastic soils (PI = 0) are valid and don't require plastic limit
  */
 export const validateClassificationData = (
   grainSize: GrainSizeDistribution | null,
   atterberg: CalculatedResults,
-): { valid: boolean; missingData: string[] } => {
+): { valid: boolean; missingData: string[]; warnings: string[] } => {
   const missing: string[] = [];
+  const warnings: string[] = [];
 
   if (!grainSize) {
     missing.push("Grain size distribution");
@@ -288,16 +326,28 @@ export const validateClassificationData = (
     }
   }
 
+  const isNonPlastic = atterberg.plasticityIndex === undefined ||
+                       atterberg.plasticityIndex === 0 ||
+                       atterberg.plasticityIndex < 0.5;
+
   if (!atterberg.liquidLimit) {
-    missing.push("Liquid Limit");
+    missing.push("Liquid Limit (or indication of non-plastic material)");
   }
-  if (!atterberg.plasticLimit) {
+
+  // For non-plastic soils, plastic limit is not required
+  if (!isNonPlastic && !atterberg.plasticLimit) {
     missing.push("Plastic Limit");
+  }
+
+  // Warn if soil appears to be non-plastic but has both LL and PL
+  if (isNonPlastic && atterberg.liquidLimit && atterberg.plasticLimit) {
+    warnings.push("Soil is classified as non-plastic (PI ≈ 0)");
   }
 
   return {
     valid: missing.length === 0,
     missingData: missing,
+    warnings,
   };
 };
 

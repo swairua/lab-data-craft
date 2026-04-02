@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Edit2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Edit2, X, AlertCircle, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -27,6 +27,7 @@ import {
   calculateTestResult,
   countValidTrials,
   getActiveResultValue,
+  getTestValidationMessages,
   isAtterbergTestComplete,
   isLiquidLimitTrialStarted,
   isPlasticLimitTrialStarted,
@@ -207,21 +208,52 @@ const AtterbergTestCard = ({
             />
           )}
 
-          <div className="grid grid-cols-1 gap-3 rounded-lg border border-dashed p-3 sm:grid-cols-2">
-            <div>
-              <div className="text-xs font-medium text-muted-foreground">Computed Result</div>
-              <div className="mt-1 text-lg font-bold">{activeResult !== null ? `${activeResult}%` : "-"}</div>
-            </div>
-            <div>
-              <div className="text-xs font-medium text-muted-foreground">Summary</div>
-              <div className="mt-1 text-sm text-foreground">
-                {activeResult !== null
-                  ? isComplete
-                    ? `${testTypeLabels[test.type]} ready from ${validTrials} valid trial${validTrials === 1 ? "" : "s"}.`
-                    : `${testTypeLabels[test.type]} preview from ${validTrials} valid trial${validTrials === 1 ? "" : "s"}. Add more valid rows to finalize the result.`
-                  : "Enter complete numeric rows to calculate this test."}
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 rounded-lg border border-dashed p-3 sm:grid-cols-2">
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Computed Result</div>
+                <div className="mt-1 text-lg font-bold">{activeResult !== null ? `${activeResult}%` : "-"}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Summary</div>
+                <div className="mt-1 text-sm text-foreground">
+                  {activeResult !== null
+                    ? isComplete
+                      ? `${testTypeLabels[test.type]} complete from ${validTrials} valid trial${validTrials === 1 ? "" : "s"}.`
+                      : `${testTypeLabels[test.type]} incomplete (${validTrials} valid trial${validTrials === 1 ? "" : "s"}). Additional data needed.`
+                    : "Enter complete numeric rows to calculate this test."}
+                </div>
               </div>
             </div>
+
+            {/* Show validation messages */}
+            {useMemo(() => {
+              const { errors, warnings } = getTestValidationMessages(test);
+              return (
+                <>
+                  {errors.length > 0 && (
+                    <div className="flex gap-2 rounded-lg border border-red-200/50 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-200">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        {errors.map((err, i) => (
+                          <div key={i}>{err}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {warnings.length > 0 && errors.length === 0 && (
+                    <div className="flex gap-2 rounded-lg border border-amber-200/50 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-200">
+                      <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        {warnings.map((warn, i) => (
+                          <div key={i}>{warn}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            }, [test])}
           </div>
         </CardContent>
       )}
