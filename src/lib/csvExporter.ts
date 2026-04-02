@@ -5,6 +5,7 @@ interface CSVData {
   date?: string;
   fields?: { label: string; value: string }[];
   tables?: {
+    title?: string;
     headers: string[];
     rows: string[][];
   }[];
@@ -50,6 +51,7 @@ export const generateTestCSV = (data: CSVData) => {
 
   if (data.tables) {
     for (const table of data.tables) {
+      if (table.title) lines.push(escapeCSV(table.title));
       lines.push(table.headers.map(escapeCSV).join(","));
       for (const row of table.rows) {
         lines.push(row.map((cell) => escapeCSV(cell || "-")).join(","));
@@ -61,9 +63,9 @@ export const generateTestCSV = (data: CSVData) => {
   const csvContent = `\uFEFF${lines.join("\r\n")}`;
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${data.title.replace(/\s+/g, "_")}_Report.csv`;
-  a.click();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${data.title.replace(/\s+/g, "_")}_Report.csv`;
+  anchor.click();
   URL.revokeObjectURL(url);
 };

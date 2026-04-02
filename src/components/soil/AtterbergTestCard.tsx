@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Edit2, X } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight, X, Edit2, Check } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,29 +11,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EnhancedAtterbergTest, AtterbergTestType, CalculatedResults } from "@/context/TestDataContext";
+import type { AtterbergTest, AtterbergTestType, LiquidLimitTrial, PlasticLimitTrial, ShrinkageLimitTrial } from "@/context/TestDataContext";
+import { areCalculatedResultsEqual, calculateTestResult, countValidTrials, getActiveResultValue } from "@/lib/atterbergCalculations";
 import LiquidLimitSection from "./LiquidLimitSection";
 import PlasticLimitSection from "./PlasticLimitSection";
 import ShrinkageLimitSection from "./ShrinkageLimitSection";
-import { calculatePlasticityIndex } from "@/lib/atterbergCalculations";
 
 interface AtterbergTestCardProps {
-  test: EnhancedAtterbergTest;
+  test: AtterbergTest;
   onDelete: () => void;
   onUpdateTitle: (title: string) => void;
   onUpdateType: (type: AtterbergTestType) => void;
   onToggleExpanded: () => void;
-  onAddLiquidLimitRow: () => void;
-  onRemoveLiquidLimitRow: (index: number) => void;
-  onUpdateLiquidLimitRow: (index: number, field: string, value: string) => void;
-  onAddPlasticLimitRow: () => void;
-  onRemovePlasticLimitRow: (index: number) => void;
-  onUpdatePlasticLimitRow: (index: number, field: string, value: string) => void;
-  onAddShrinkageLimitRow: () => void;
-  onRemoveShrinkageLimitRow: (index: number) => void;
-  onUpdateShrinkageLimitRow: (index: number, field: string, value: string) => void;
-  onUpdateCalculatedResults: (results: CalculatedResults) => void;
+  onUpdateLiquidLimitTrials: (trials: LiquidLimitTrial[]) => void;
+  onUpdatePlasticLimitTrials: (trials: PlasticLimitTrial[]) => void;
+  onUpdateShrinkageLimitTrials: (trials: ShrinkageLimitTrial[]) => void;
+  onSyncResult: (test: AtterbergTest) => void;
 }
+
+const testTypeLabels: Record<AtterbergTestType, string> = {
+  liquidLimit: "Liquid Limit",
+  plasticLimit: "Plastic Limit",
+  shrinkageLimit: "Shrinkage Limit",
+};
 
 const AtterbergTestCard = ({
   test,
@@ -40,212 +41,141 @@ const AtterbergTestCard = ({
   onUpdateTitle,
   onUpdateType,
   onToggleExpanded,
-  onAddLiquidLimitRow,
-  onRemoveLiquidLimitRow,
-  onUpdateLiquidLimitRow,
-  onAddPlasticLimitRow,
-  onRemovePlasticLimitRow,
-  onUpdatePlasticLimitRow,
-  onAddShrinkageLimitRow,
-  onRemoveShrinkageLimitRow,
-  onUpdateShrinkageLimitRow,
-  onUpdateCalculatedResults,
+  onUpdateLiquidLimitTrials,
+  onUpdatePlasticLimitTrials,
+  onUpdateShrinkageLimitTrials,
+  onSyncResult,
 }: AtterbergTestCardProps) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editTitle, setEditTitle] = useState(test.testTitle);
+  const [draftTitle, setDraftTitle] = useState(test.title);
 
-  const testTypeLabel = useMemo(() => {
-    const labels: Record<AtterbergTestType, string> = {
-      liquidLimit: "Liquid Limit",
-      plasticLimit: "Plastic Limit",
-      shrinkageLimit: "Shrinkage Limit",
-    };
-    return labels[test.testType];
-  }, [test.testType]);
+  useEffect(() => {
+    setDraftTitle(test.title);
+  }, [test.title]);
 
-  const handleSaveTitle = useCallback(() => {
-    if (editTitle.trim()) {
-      onUpdateTitle(editTitle);
+  const computedResult = useMemo(() => calculateTestResult(test), [test]);
+  const activeResult = getActiveResultValue(test, computedResult);
+  const validTrials = countValidTrials(test);
+
+  useEffect(() => {
+    if (!areCalculatedResultsEqual(test.result, computedResult)) {
+      onSyncResult({ ...test, result: computedResult });
     }
+  }, [computedResult, onSyncResult, test]);
+
+  const saveTitle = () => {
+    onUpdateTitle(draftTitle.trim() || testTypeLabels[test.type]);
     setIsEditingTitle(false);
-  }, [editTitle, onUpdateTitle]);
-
-  const handleCalculatedLiquidLimit = useCallback((ll: number | null) => {
-    const results = { ...test.calculatedResults, liquidLimit: ll };
-    if (ll !== null && test.calculatedResults.plasticLimit !== null) {
-      results.plasticityIndex = calculatePlasticityIndex(ll, test.calculatedResults.plasticLimit);
-    }
-    onUpdateCalculatedResults(results);
-  }, [test.calculatedResults, onUpdateCalculatedResults]);
-
-  const handleCalculatedPlasticLimit = useCallback((pl: number | null) => {
-    const results = { ...test.calculatedResults, plasticLimit: pl };
-    if (pl !== null && test.calculatedResults.liquidLimit !== null) {
-      results.plasticityIndex = calculatePlasticityIndex(test.calculatedResults.liquidLimit, pl);
-    }
-    onUpdateCalculatedResults(results);
-  }, [test.calculatedResults, onUpdateCalculatedResults]);
-
-  const handleCalculatedShrinkageLimit = useCallback((sl: number | null) => {
-    const results = { ...test.calculatedResults, shrinkageLimit: sl };
-    onUpdateCalculatedResults(results);
-  }, [onUpdateCalculatedResults]);
+  };
 
   return (
-    <Card className="shadow-sm border transition-all hover:shadow-md">
-      {/* Card Header */}
-      <CardHeader className="pb-3 space-y-3">
-        {/* Title and Controls Row */}
-        <div className="flex items-center justify-between gap-2">
-          {/* Expand/Collapse and Title */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={onToggleExpanded}
-            >
-              {test.isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
+    <Card className="border shadow-sm transition-all hover:shadow-md print:shadow-none">
+      <CardHeader className="space-y-3 pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={onToggleExpanded}>
+              {test.isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </Button>
 
             {isEditingTitle ? (
-              <div className="flex gap-1 flex-1">
+              <div className="flex flex-1 items-center gap-1">
                 <Input
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="h-7 text-sm flex-1"
-                  autoFocus
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter") handleSaveTitle();
+                  value={draftTitle}
+                  onChange={(event) => setDraftTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") saveTitle();
                   }}
+                  autoFocus
+                  className="h-8"
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 flex-shrink-0"
-                  onClick={handleSaveTitle}
-                >
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={saveTitle}>
                   <Check className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ) : (
-              <div
-                className="flex items-center gap-2 flex-1 cursor-pointer hover:text-primary transition-colors group"
+              <button
+                type="button"
+                className="group flex min-w-0 flex-1 items-center gap-2 text-left"
                 onClick={() => setIsEditingTitle(true)}
               >
-                <span className="font-semibold text-sm truncate">{test.testTitle}</span>
-                <Edit2 className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-              </div>
+                <span className="truncate text-sm font-semibold">{test.title}</span>
+                <Edit2 className="h-3.5 w-3.5 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
             )}
           </div>
 
-          {/* Delete Button */}
           <Button
+            type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
+            className="h-7 w-7 flex-shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={onDelete}
           >
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        {/* Type Selector Row */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground font-medium">Test Type:</span>
-          <Select value={test.testType} onValueChange={(value) => onUpdateType(value as AtterbergTestType)}>
-            <SelectTrigger className="h-8 w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="liquidLimit">Liquid Limit</SelectItem>
-              <SelectItem value="plasticLimit">Plastic Limit</SelectItem>
-              <SelectItem value="shrinkageLimit">Shrinkage Limit</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Test Type</span>
+            <Select value={test.type} onValueChange={(value) => onUpdateType(value as AtterbergTestType)}>
+              <SelectTrigger className="h-8 w-[190px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="liquidLimit">Liquid Limit</SelectItem>
+                <SelectItem value="plasticLimit">Plastic Limit</SelectItem>
+                <SelectItem value="shrinkageLimit">Shrinkage Limit</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            {validTrials} valid trial{validTrials === 1 ? "" : "s"}
+          </div>
         </div>
       </CardHeader>
 
-      {/* Card Content - Conditional Rendering */}
       {test.isExpanded && (
-        <CardContent className="pt-0 space-y-4">
-          {test.testType === "liquidLimit" && (
+        <CardContent className="space-y-4 pt-0">
+          {test.type === "liquidLimit" && (
             <LiquidLimitSection
-              rows={test.liquidLimitRows}
-              onAddRow={onAddLiquidLimitRow}
-              onRemoveRow={onRemoveLiquidLimitRow}
-              onUpdateRow={onUpdateLiquidLimitRow}
-              onCalculatedResultsChange={handleCalculatedLiquidLimit}
+              trials={test.trials}
+              result={computedResult.liquidLimit ?? null}
+              onChangeTrials={onUpdateLiquidLimitTrials}
             />
           )}
 
-          {test.testType === "plasticLimit" && (
+          {test.type === "plasticLimit" && (
             <PlasticLimitSection
-              rows={test.plasticLimitRows}
-              onAddRow={onAddPlasticLimitRow}
-              onRemoveRow={onRemovePlasticLimitRow}
-              onUpdateRow={onUpdatePlasticLimitRow}
-              onCalculatedResultsChange={handleCalculatedPlasticLimit}
+              trials={test.trials}
+              result={computedResult.plasticLimit ?? null}
+              onChangeTrials={onUpdatePlasticLimitTrials}
             />
           )}
 
-          {test.testType === "shrinkageLimit" && (
+          {test.type === "shrinkageLimit" && (
             <ShrinkageLimitSection
-              rows={test.shrinkageLimitRows}
-              onAddRow={onAddShrinkageLimitRow}
-              onRemoveRow={onRemoveShrinkageLimitRow}
-              onUpdateRow={onUpdateShrinkageLimitRow}
-              onCalculatedResultsChange={handleCalculatedShrinkageLimit}
+              trials={test.trials}
+              result={computedResult.shrinkageLimit ?? null}
+              onChangeTrials={onUpdateShrinkageLimitTrials}
             />
           )}
 
-          {/* Results Summary */}
-          {Object.keys(test.calculatedResults).length > 0 && (
-            <div className="border-t pt-4 mt-4">
-              <h4 className="text-sm font-semibold mb-3 text-foreground">Test Results</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {test.calculatedResults.liquidLimit !== undefined && (
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-900">
-                    <div className="text-xs text-muted-foreground font-medium">Liquid Limit (LL)</div>
-                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                      {test.calculatedResults.liquidLimit !== undefined ? `${test.calculatedResults.liquidLimit}%` : "—"}
-                    </div>
-                  </div>
-                )}
-
-                {test.calculatedResults.plasticLimit !== undefined && (
-                  <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
-                    <div className="text-xs text-muted-foreground font-medium">Plastic Limit (PL)</div>
-                    <div className="text-lg font-bold text-green-600 dark:text-green-400">
-                      {test.calculatedResults.plasticLimit !== undefined ? `${test.calculatedResults.plasticLimit}%` : "—"}
-                    </div>
-                  </div>
-                )}
-
-                {test.calculatedResults.shrinkageLimit !== undefined && (
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900">
-                    <div className="text-xs text-muted-foreground font-medium">Shrinkage Limit (SL)</div>
-                    <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                      {test.calculatedResults.shrinkageLimit !== undefined ? `${test.calculatedResults.shrinkageLimit}%` : "—"}
-                    </div>
-                  </div>
-                )}
-
-                {test.calculatedResults.plasticityIndex !== undefined && test.calculatedResults.plasticityIndex !== null && (
-                  <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-900">
-                    <div className="text-xs text-muted-foreground font-medium">Plasticity Index (PI)</div>
-                    <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                      {test.calculatedResults.plasticityIndex !== null ? `${test.calculatedResults.plasticityIndex}%` : "—"}
-                    </div>
-                  </div>
-                )}
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-dashed p-3 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">Computed Result</div>
+              <div className="mt-1 text-lg font-bold">{activeResult !== null ? `${activeResult}%` : "-"}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">Summary</div>
+              <div className="mt-1 text-sm text-foreground">
+                {activeResult !== null
+                  ? `${testTypeLabels[test.type]} ready from ${validTrials} valid trial${validTrials === 1 ? "" : "s"}.`
+                  : "Enter complete numeric rows to calculate this test."}
               </div>
             </div>
-          )}
+          </div>
         </CardContent>
       )}
     </Card>

@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @layer base {
   :root {
@@ -59,27 +59,43 @@
   }
 
   .dark {
-    --background: 215 25% 8%;
-    --foreground: 210 20% 92%;
-    --card: 215 25% 12%;
-    --card-foreground: 210 20% 92%;
-    --popover: 215 25% 12%;
-    --popover-foreground: 210 20% 92%;
-    --primary: 215 70% 55%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 215 20% 18%;
-    --secondary-foreground: 210 20% 85%;
-    --muted: 215 20% 16%;
-    --muted-foreground: 215 10% 55%;
-    --accent: 160 50% 42%;
+    --background: 224 22% 10%;
+    --foreground: 210 20% 96%;
+
+    --card: 224 20% 13%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 224 20% 13%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 214 90% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 19% 20%;
+    --secondary-foreground: 210 20% 96%;
+
+    --muted: 217 19% 17%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 160 60% 42%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 215 20% 20%;
-    --input: 215 20% 20%;
-    --ring: 215 70% 55%;
-    --calculated: 215 40% 15%;
-    --calculated-foreground: 215 70% 65%;
+
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 210 20% 96%;
+
+    --border: 217 19% 22%;
+    --input: 217 19% 22%;
+    --ring: 214 90% 60%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --success: 160 60% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --calculated: 215 70% 15%;
+    --calculated-foreground: 215 70% 85%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -89,21 +105,13 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
     font-family: var(--font-body);
-  }
-}
-
-@layer components {
-  .calculated-field {
-    @apply bg-calculated text-calculated-foreground font-mono text-sm;
   }
 }
