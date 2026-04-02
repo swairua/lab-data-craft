@@ -5,6 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -12,7 +22,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AtterbergTest, AtterbergTestType, LiquidLimitTrial, PlasticLimitTrial, ShrinkageLimitTrial } from "@/context/TestDataContext";
-import { areCalculatedResultsEqual, calculateTestResult, countValidTrials, getActiveResultValue } from "@/lib/atterbergCalculations";
+import {
+  areCalculatedResultsEqual,
+  calculateTestResult,
+  countValidTrials,
+  getActiveResultValue,
+  isAtterbergTestComplete,
+  isLiquidLimitTrialStarted,
+  isPlasticLimitTrialStarted,
+  isShrinkageLimitTrialStarted,
+} from "@/lib/atterbergCalculations";
 import LiquidLimitSection from "./LiquidLimitSection";
 import PlasticLimitSection from "./PlasticLimitSection";
 import ShrinkageLimitSection from "./ShrinkageLimitSection";
@@ -48,6 +67,7 @@ const AtterbergTestCard = ({
 }: AtterbergTestCardProps) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(test.title);
+  const [pendingType, setPendingType] = useState<AtterbergTestType | null>(null);
 
   useEffect(() => {
     setDraftTitle(test.title);
@@ -56,6 +76,11 @@ const AtterbergTestCard = ({
   const computedResult = useMemo(() => calculateTestResult(test), [test]);
   const activeResult = getActiveResultValue(test, computedResult);
   const validTrials = countValidTrials(test);
+  const isComplete = isAtterbergTestComplete(test);
+  const hasStartedData =
+    (test.type === "liquidLimit" && test.trials.some(isLiquidLimitTrialStarted)) ||
+    (test.type === "plasticLimit" && test.trials.some(isPlasticLimitTrialStarted)) ||
+    (test.type === "shrinkageLimit" && test.trials.some(isShrinkageLimitTrialStarted));
 
   useEffect(() => {
     if (!areCalculatedResultsEqual(test.result, computedResult)) {
@@ -66,6 +91,24 @@ const AtterbergTestCard = ({
   const saveTitle = () => {
     onUpdateTitle(draftTitle.trim() || testTypeLabels[test.type]);
     setIsEditingTitle(false);
+  };
+
+  const requestTypeChange = (type: AtterbergTestType) => {
+    if (type === test.type) return;
+
+    if (hasStartedData) {
+      setPendingType(type);
+      return;
+    }
+
+    onUpdateType(type);
+  };
+
+  const confirmTypeChange = () => {
+    if (pendingType) {
+      onUpdateType(pendingType);
+    }
+    setPendingType(null);
   };
 
   return (
@@ -118,7 +161,7 @@ const AtterbergTestCard = ({
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Test Type</span>
-            <Select value={test.type} onValueChange={(value) => onUpdateType(value as AtterbergTestType)}>
+            <Select value={test.type} onValueChange={(value) => requestTypeChange(value as AtterbergTestType)}>
               <SelectTrigger className="h-8 w-[190px]">
                 <SelectValue />
               </SelectTrigger>
@@ -171,13 +214,30 @@ const AtterbergTestCard = ({
               <div className="text-xs font-medium text-muted-foreground">Summary</div>
               <div className="mt-1 text-sm text-foreground">
                 {activeResult !== null
-                  ? `${testTypeLabels[test.type]} ready from ${validTrials} valid trial${validTrials === 1 ? "" : "s"}.`
+                  ? isComplete
+                    ? `${testTypeLabels[test.type]} ready from ${validTrials} valid trial${validTrials === 1 ? "" : "s"}.`
+                    : `${testTypeLabels[test.type]} preview from ${validTrials} valid trial${validTrials === 1 ? "" : "s"}. Add more valid rows to finalize the result.`
                   : "Enter complete numeric rows to calculate this test."}
               </div>
             </div>
           </div>
         </CardContent>
       )}
+
+      <AlertDialog open={pendingType !== null} onOpenChange={(open) => !open && setPendingType(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change test type?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This test already has entered data. Changing the type will reset the current rows and result.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingType(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmTypeChange}>Change type</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

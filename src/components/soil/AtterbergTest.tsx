@@ -6,6 +6,16 @@ import TestSection from "@/components/TestSection";
 import AtterbergTestCard from "./AtterbergTestCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
@@ -31,7 +41,6 @@ import {
   countCompletedTests,
   countRecordDataPoints,
   deriveAtterbergStatus,
-  getActiveResultValue,
   isLiquidLimitTrialValid,
   isPlasticLimitTrialValid,
   isShrinkageLimitTrialValid,
@@ -158,6 +167,7 @@ const updateTrialsForType = (test: AtterbergTest, trials: AtterbergTest["trials"
 const AtterbergTest = () => {
   const project = useProject();
   const [projectState, setProjectState] = useState<AtterbergProjectState>({ records: [] });
+  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const hydratedRef = useRef(false);
 
   const computedRecords = useMemo<ComputedRecord[]>(() => {
@@ -208,18 +218,19 @@ const AtterbergTest = () => {
   const { totalDataPoints, aggregateResults, aggregateProjectResults, status, totalCompletedTests } = useMemo(() => {
     const totalPoints = computedRecords.reduce((sum, record) => sum + record.dataPoints, 0);
     const completedTests = computedRecords.reduce((sum, record) => sum + record.completedTests, 0);
+    const totalTests = computedRecords.reduce((sum, record) => sum + record.tests.length, 0);
     const projectResults = calculateProjectResults(computedRecords);
 
     return {
       totalDataPoints: totalPoints,
       totalCompletedTests: completedTests,
       aggregateProjectResults: projectResults,
-      status: deriveAtterbergStatus(totalPoints, completedTests),
+      status: deriveAtterbergStatus(totalPoints, completedTests, totalTests),
       aggregateResults: buildAtterbergSummaryFields(projectResults, computedRecords.length, totalPoints),
     };
   }, [computedRecords]);
 
-  useTestReport("atterberg", totalDataPoints, aggregateResults);
+  useTestReport("atterberg", totalDataPoints, aggregateResults, status);
 
   const updateRecord = useCallback((recordId: string, updater: (record: AtterbergRecord) => AtterbergRecord) => {
     setProjectState((prev) => ({
@@ -313,6 +324,12 @@ const AtterbergTest = () => {
     setProjectState({ records: [] });
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem("enhancedAtterbergTests");
+    setIsClearDialogOpen(false);
+    toast.success("Atterberg project cleared");
+  }, []);
+
+  const handleClearRequest = useCallback(() => {
+    setIsClearDialogOpen(true);
   }, []);
 
   const buildExportPayload = useCallback((): AtterbergExportPayload => {
@@ -367,7 +384,10 @@ const AtterbergTest = () => {
   const exportTables = useMemo(() => buildTablesForExport(computedRecords), [computedRecords]);
 
   const handleExportPDF = useCallback(() => {
-    if (computedRecords.length === 0) return;
+    if (computedRecords.length === 0) {
+      toast.error("No records to export");
+      return false;
+    }
 
     generateTestPDF({
       title: "Atterberg Limits Testing",
@@ -377,10 +397,15 @@ const AtterbergTest = () => {
       fields: aggregateResults,
       tables: exportTables,
     });
+
+    return true;
   }, [aggregateResults, computedRecords.length, exportTables, project.clientName, project.date, project.projectName]);
 
   const handleExportCSV = useCallback(() => {
-    if (computedRecords.length === 0) return;
+    if (computedRecords.length === 0) {
+      toast.error("No records to export");
+      return false;
+    }
 
     generateTestCSV({
       title: "Atterberg Limits Testing",
@@ -390,16 +415,19 @@ const AtterbergTest = () => {
       fields: aggregateResults,
       tables: exportTables,
     });
+
+    return true;
   }, [aggregateResults, computedRecords.length, exportTables, project.clientName, project.date, project.projectName]);
 
   return (
-    <TestSection
-      title="Atterberg Limits Testing"
-      onSave={handleSave}
-      onClear={handleClearAll}
-      onExportPDF={handleExportPDF}
-      onExportCSV={handleExportCSV}
-    >
+    <>
+      <TestSection
+        title="Atterberg Limits Testing"
+        onSave={handleSave}
+        onClear={handleClearRequest}
+        onExportPDF={handleExportPDF}
+        onExportCSV={handleExportCSV}
+      >
       <div className="space-y-4 print:space-y-3">
         <Card className="border bg-muted/20 shadow-none print:border-border print:bg-transparent">
           <CardContent className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
@@ -459,7 +487,23 @@ const AtterbergTest = () => {
           </div>
         )}
       </div>
-    </TestSection>
+      </TestSection>
+
+      <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Atterberg project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove every Atterberg record, test, and saved draft from this browser. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearAll}>Clear project</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 
