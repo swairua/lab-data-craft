@@ -16,16 +16,19 @@ const createTrial = (index: number): PlasticLimitTrial => ({
   id: `trial-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   trialNo: String(index + 1),
   moisture: "",
+  cupMass: "",
+  wetMass: "",
+  dryMass: "",
 });
 
 const PlasticLimitSection = ({ trials, result, onChangeTrials }: PlasticLimitSectionProps) => {
-  const updateTrial = (index: number, value: string) => {
+  const updateTrial = (index: number, field: keyof PlasticLimitTrial, value: string) => {
     onChangeTrials(
       trials.map((trial, trialIndex) =>
         trialIndex === index
           ? {
               ...trial,
-              moisture: sanitizeNumericInput(value),
+              [field]: field === "trialNo" ? value : sanitizeNumericInput(value),
             }
           : trial,
       ),
@@ -54,11 +57,14 @@ const PlasticLimitSection = ({ trials, result, onChangeTrials }: PlasticLimitSec
 
       <div className="rounded-lg border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] text-sm">
+          <table className="w-full min-w-[700px] text-sm">
             <thead>
               <tr className="bg-muted border-b">
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Trial</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Moisture Content (%)</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Moisture (%)</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Cup Mass (g)</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Wet Mass (g)</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Dry Mass (g)</th>
                 <th className="w-10" />
               </tr>
             </thead>
@@ -83,9 +89,39 @@ const PlasticLimitSection = ({ trials, result, onChangeTrials }: PlasticLimitSec
                         type="text"
                         inputMode="decimal"
                         value={trial.moisture}
-                        onChange={(event) => updateTrial(index, event.target.value)}
+                        onChange={(event) => updateTrial(index, "moisture", event.target.value)}
                         className={cn("h-8", started && !valid && !trial.moisture && "border-amber-300")}
                         placeholder="24"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={trial.cupMass || ""}
+                        onChange={(event) => updateTrial(index, "cupMass", event.target.value)}
+                        className="h-8"
+                        placeholder="-"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={trial.wetMass || ""}
+                        onChange={(event) => updateTrial(index, "wetMass", event.target.value)}
+                        className="h-8"
+                        placeholder="-"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={trial.dryMass || ""}
+                        onChange={(event) => updateTrial(index, "dryMass", event.target.value)}
+                        className="h-8"
+                        placeholder="-"
                       />
                     </td>
                     <td className="px-1 py-1.5">

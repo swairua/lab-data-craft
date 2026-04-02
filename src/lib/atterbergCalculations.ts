@@ -131,7 +131,10 @@ export const calculateTestResult = (test: AtterbergTest): CalculatedResults => {
       return plasticLimit === null ? {} : { plasticLimit };
     }
     case "shrinkageLimit": {
-      const shrinkageLimit = calculateShrinkageLimit(test.trials);
+      // Support dual-method: linear or volumetric (default)
+      const shrinkageLimit = test.method === "linear"
+        ? calculateLinearShrinkage(test.trials)
+        : calculateVolumetricShrinkage(test.trials);
       return shrinkageLimit === null ? {} : { shrinkageLimit };
     }
   }

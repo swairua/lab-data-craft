@@ -346,12 +346,15 @@ const AtterbergTest = () => {
       version: "3.0",
       project: {
         title: project.projectName || "Atterberg Limits Testing",
-        clientName: project.clientName,
+        clientName: project.clientName || projectState.clientName,
         date: project.date,
+        labOrganization: projectState.labOrganization,
+        dateReported: projectState.dateReported,
+        checkedBy: projectState.checkedBy,
         records: persistedState.records,
       },
     };
-  }, [persistedState.records, project.clientName, project.date, project.projectName]);
+  }, [persistedState.records, project.clientName, project.date, project.projectName, projectState.clientName, projectState.labOrganization, projectState.dateReported, projectState.checkedBy]);
 
   const handleExportJSON = useCallback(() => {
     if (computedRecords.length === 0) {
@@ -400,14 +403,17 @@ const AtterbergTest = () => {
     generateTestPDF({
       title: "Atterberg Limits Testing",
       projectName: project.projectName,
-      clientName: project.clientName,
+      clientName: project.clientName || projectState.clientName,
       date: project.date,
+      labOrganization: projectState.labOrganization,
+      dateReported: projectState.dateReported,
+      checkedBy: projectState.checkedBy,
       fields: aggregateResults,
       tables: exportTables,
     });
 
     return true;
-  }, [aggregateResults, computedRecords.length, exportTables, project.clientName, project.date, project.projectName]);
+  }, [aggregateResults, computedRecords.length, exportTables, project.clientName, project.date, project.projectName, projectState.clientName, projectState.labOrganization, projectState.dateReported, projectState.checkedBy]);
 
   const handleExportCSV = useCallback(() => {
     if (computedRecords.length === 0) {
@@ -418,14 +424,17 @@ const AtterbergTest = () => {
     generateTestCSV({
       title: "Atterberg Limits Testing",
       projectName: project.projectName,
-      clientName: project.clientName,
+      clientName: project.clientName || projectState.clientName,
       date: project.date,
+      labOrganization: projectState.labOrganization,
+      dateReported: projectState.dateReported,
+      checkedBy: projectState.checkedBy,
       fields: aggregateResults,
       tables: exportTables,
     });
 
     return true;
-  }, [aggregateResults, computedRecords.length, exportTables, project.clientName, project.date, project.projectName]);
+  }, [aggregateResults, computedRecords.length, exportTables, project.clientName, project.date, project.projectName, projectState.clientName, projectState.labOrganization, projectState.dateReported, projectState.checkedBy]);
 
   return (
     <>
@@ -449,6 +458,52 @@ const AtterbergTest = () => {
             <OverviewMetric label="Status" value={status} className="capitalize" />
           </CardContent>
         </Card>
+
+        <Collapsible defaultOpen={false}>
+          <Card className="border shadow-sm print:shadow-none">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Project Metadata</h3>
+                <Button type="button" variant="ghost" size="sm">
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-4 pt-0">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Lab Organization</label>
+                    <Input
+                      value={projectState.labOrganization || ""}
+                      onChange={(e) => updateProjectMetadata(() => ({ labOrganization: e.target.value }))}
+                      placeholder="Laboratory name or organization"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Date Reported</label>
+                    <Input
+                      type="date"
+                      value={projectState.dateReported || ""}
+                      onChange={(e) => updateProjectMetadata(() => ({ dateReported: e.target.value }))}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Checked By</label>
+                    <Input
+                      value={projectState.checkedBy || ""}
+                      onChange={(e) => updateProjectMetadata(() => ({ checkedBy: e.target.value }))}
+                      placeholder="Technician or engineer name"
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           <Button type="button" onClick={addRecord} className="gap-2">
@@ -481,6 +536,10 @@ const AtterbergTest = () => {
                 onUpdateTitle={(title) => updateRecord(record.id, (current) => ({ ...current, title }))}
                 onUpdateLabel={(label) => updateRecord(record.id, (current) => ({ ...current, label }))}
                 onUpdateNote={(note) => updateRecord(record.id, (current) => ({ ...current, note }))}
+                onUpdateSampleNumber={(sampleNumber) => updateRecord(record.id, (current) => ({ ...current, sampleNumber }))}
+                onUpdateDateSubmitted={(dateSubmitted) => updateRecord(record.id, (current) => ({ ...current, dateSubmitted }))}
+                onUpdateDateTested={(dateTested) => updateRecord(record.id, (current) => ({ ...current, dateTested }))}
+                onUpdateTestedBy={(testedBy) => updateRecord(record.id, (current) => ({ ...current, testedBy }))}
                 onAddTest={(type) => addTest(record.id, type)}
                 onRemoveTest={(testId) => removeTest(record.id, testId)}
                 onToggleTestExpanded={(testId) => updateTest(record.id, testId, (test) => ({ ...test, isExpanded: !test.isExpanded }))}
@@ -536,6 +595,10 @@ interface RecordCardProps {
   onUpdateTitle: (title: string) => void;
   onUpdateLabel: (label: string) => void;
   onUpdateNote: (note: string) => void;
+  onUpdateSampleNumber: (sampleNumber: string) => void;
+  onUpdateDateSubmitted: (dateSubmitted: string) => void;
+  onUpdateDateTested: (dateTested: string) => void;
+  onUpdateTestedBy: (testedBy: string) => void;
   onAddTest: (type?: AtterbergTestType) => void;
   onRemoveTest: (testId: string) => void;
   onToggleTestExpanded: (testId: string) => void;
@@ -555,6 +618,10 @@ const RecordCard = ({
   onUpdateTitle,
   onUpdateLabel,
   onUpdateNote,
+  onUpdateSampleNumber,
+  onUpdateDateSubmitted,
+  onUpdateDateTested,
+  onUpdateTestedBy,
   onAddTest,
   onRemoveTest,
   onToggleTestExpanded,
@@ -620,6 +687,22 @@ const RecordCard = ({
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">Identifier / Borehole / Sample Group</div>
                   <Input value={record.label} onChange={(event) => onUpdateLabel(event.target.value)} className="h-9" placeholder="Sample ID, borehole, depth, etc." />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Sample Number</div>
+                  <Input value={record.sampleNumber || ""} onChange={(event) => onUpdateSampleNumber(event.target.value)} className="h-9" placeholder="Laboratory sample number" />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Date Submitted</div>
+                  <Input type="date" value={record.dateSubmitted || ""} onChange={(event) => onUpdateDateSubmitted(event.target.value)} className="h-9" />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Date Tested</div>
+                  <Input type="date" value={record.dateTested || ""} onChange={(event) => onUpdateDateTested(event.target.value)} className="h-9" />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Tested By</div>
+                  <Input value={record.testedBy || ""} onChange={(event) => onUpdateTestedBy(event.target.value)} className="h-9" placeholder="Technician name" />
                 </div>
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">Note</div>
@@ -691,11 +774,13 @@ const RecordCard = ({
 const buildTablesForExport = (records: ComputedRecord[]) => {
   const recordSummaryTable = {
     title: "Record Summary",
-    headers: ["Record", "Identifier", "Note", "LL (%)", "PL (%)", "SL (%)", "PI (%)", "Valid Points"],
+    headers: ["Record", "Identifier", "Sample #", "Date Tested", "Tested By", "LL (%)", "PL (%)", "SL (%)", "PI (%)", "Valid Points"],
     rows: records.map((record) => [
       record.title,
       record.label || "-",
-      record.note || "-",
+      record.sampleNumber || "-",
+      record.dateTested || "-",
+      record.testedBy || "-",
       record.results.liquidLimit !== undefined ? String(record.results.liquidLimit) : "-",
       record.results.plasticLimit !== undefined ? String(record.results.plasticLimit) : "-",
       record.results.shrinkageLimit !== undefined ? String(record.results.shrinkageLimit) : "-",
