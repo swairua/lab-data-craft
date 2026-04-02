@@ -5,6 +5,7 @@ import type {
   LiquidLimitTrial,
   PlasticLimitTrial,
   ShrinkageLimitTrial,
+  TestStatus,
 } from "@/context/TestDataContext";
 
 const round = (value: number) => Number(value.toFixed(2));
@@ -52,7 +53,7 @@ export const getValidShrinkageLimitTrials = (trials: ShrinkageLimitTrial[]) =>
       trialNo: trial.trialNo,
     }));
 
-const averageNumbers = (values: number[]) => {
+export const averageNumbers = (values: number[]) => {
   if (values.length === 0) return null;
   return round(values.reduce((sum, value) => sum + value, 0) / values.length);
 };
@@ -188,6 +189,38 @@ export const calculateRecordResults = (record: AtterbergRecord): CalculatedResul
 };
 
 export const countRecordDataPoints = (record: AtterbergRecord) => record.tests.reduce((sum, test) => sum + countValidTrials(test), 0);
+
+export const countCompletedTests = (record: AtterbergRecord) =>
+  record.tests.reduce((sum, test) => sum + (getActiveResultValue(test, calculateTestResult(test)) !== null ? 1 : 0), 0);
+
+export const calculateProjectResults = (records: AtterbergRecord[]): CalculatedResults => {
+  const liquidLimit = averageNumbers(records.map((record) => record.results.liquidLimit).filter(isNumber));
+  const plasticLimit = averageNumbers(records.map((record) => record.results.plasticLimit).filter(isNumber));
+  const shrinkageLimit = averageNumbers(records.map((record) => record.results.shrinkageLimit).filter(isNumber));
+  const plasticityIndex = calculatePlasticityIndex(liquidLimit, plasticLimit);
+
+  return {
+    ...(liquidLimit !== null ? { liquidLimit } : {}),
+    ...(plasticLimit !== null ? { plasticLimit } : {}),
+    ...(shrinkageLimit !== null ? { shrinkageLimit } : {}),
+    ...(plasticityIndex !== null ? { plasticityIndex } : {}),
+  };
+};
+
+export const deriveAtterbergStatus = (dataPoints: number, completedTests: number): TestStatus => {
+  if (dataPoints === 0) return "not-started";
+  if (completedTests === 0) return "in-progress";
+  return "in-progress";
+};
+
+export const buildAtterbergSummaryFields = (results: CalculatedResults, recordCount: number, totalDataPoints: number) => [
+  { label: "Avg LL", value: results.liquidLimit !== undefined ? `${results.liquidLimit}%` : "" },
+  { label: "Avg PL", value: results.plasticLimit !== undefined ? `${results.plasticLimit}%` : "" },
+  { label: "Avg SL", value: results.shrinkageLimit !== undefined ? `${results.shrinkageLimit}%` : "" },
+  { label: "Avg PI", value: results.plasticityIndex !== undefined ? `${results.plasticityIndex}%` : "" },
+  { label: "Records", value: String(recordCount) },
+  { label: "Valid Data Points", value: String(totalDataPoints) },
+];
 
 export const areCalculatedResultsEqual = (left: CalculatedResults, right: CalculatedResults) =>
   left.liquidLimit === right.liquidLimit &&
