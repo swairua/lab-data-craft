@@ -148,6 +148,22 @@ export const countValidTrials = (test: AtterbergTest) => {
   }
 };
 
+export const isLiquidLimitTestComplete = (test: Extract<AtterbergTest, { type: "liquidLimit" }>) => countValidTrials(test) >= 2;
+export const isPlasticLimitTestComplete = (test: Extract<AtterbergTest, { type: "plasticLimit" }>) => countValidTrials(test) >= 2;
+export const isShrinkageLimitTestComplete = (test: Extract<AtterbergTest, { type: "shrinkageLimit" }>) =>
+  getValidShrinkageLimitTrials(test.trials).some((trial) => trial.initialVolume > 0);
+
+export const isAtterbergTestComplete = (test: AtterbergTest) => {
+  switch (test.type) {
+    case "liquidLimit":
+      return isLiquidLimitTestComplete(test);
+    case "plasticLimit":
+      return isPlasticLimitTestComplete(test);
+    case "shrinkageLimit":
+      return isShrinkageLimitTestComplete(test);
+  }
+};
+
 export const getActiveResultValue = (test: AtterbergTest, result: CalculatedResults = test.result) => {
   switch (test.type) {
     case "liquidLimit":
@@ -191,7 +207,7 @@ export const calculateRecordResults = (record: AtterbergRecord): CalculatedResul
 export const countRecordDataPoints = (record: AtterbergRecord) => record.tests.reduce((sum, test) => sum + countValidTrials(test), 0);
 
 export const countCompletedTests = (record: AtterbergRecord) =>
-  record.tests.reduce((sum, test) => sum + (getActiveResultValue(test, calculateTestResult(test)) !== null ? 1 : 0), 0);
+  record.tests.reduce((sum, test) => sum + (isAtterbergTestComplete(test) ? 1 : 0), 0);
 
 export const calculateProjectResults = (records: AtterbergRecord[]): CalculatedResults => {
   const liquidLimit = averageNumbers(records.map((record) => record.results.liquidLimit).filter(isNumber));
@@ -207,9 +223,9 @@ export const calculateProjectResults = (records: AtterbergRecord[]): CalculatedR
   };
 };
 
-export const deriveAtterbergStatus = (dataPoints: number, completedTests: number): TestStatus => {
+export const deriveAtterbergStatus = (dataPoints: number, completedTests: number, totalTests: number): TestStatus => {
   if (dataPoints === 0) return "not-started";
-  if (completedTests === 0) return "in-progress";
+  if (totalTests > 0 && completedTests === totalTests) return "completed";
   return "in-progress";
 };
 

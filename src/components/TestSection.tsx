@@ -9,8 +9,8 @@ interface TestSectionProps {
   children: ReactNode;
   onSave?: () => void;
   onClear?: () => void;
-  onExportPDF?: () => void;
-  onExportCSV?: () => void;
+  onExportPDF?: () => boolean | void;
+  onExportCSV?: () => boolean | void;
 }
 
 const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV }: TestSectionProps) => {
@@ -33,8 +33,8 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  onExportCSV();
-                  toast.success(`${title} CSV downloaded`);
+                  const exported = onExportCSV();
+                  if (exported !== false) toast.success(`${title} CSV downloaded`);
                 }}
               >
                 <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> CSV
@@ -45,8 +45,8 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  onExportPDF();
-                  toast.success(`${title} PDF downloaded`);
+                  const exported = onExportPDF();
+                  if (exported !== false) toast.success(`${title} PDF downloaded`);
                 }}
               >
                 <FileDown className="h-3.5 w-3.5 mr-1" /> PDF
@@ -58,7 +58,7 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
                 variant="default"
                 onClick={() => {
                   onSave();
-                  toast.success(`${title} saved successfully`);
+                  toast.success(`${title} saved locally`);
                 }}
               >
                 <Save className="h-3.5 w-3.5 mr-1" /> Save
