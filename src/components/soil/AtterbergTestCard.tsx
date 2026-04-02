@@ -201,7 +201,9 @@ const AtterbergTestCard = ({
             <ShrinkageLimitSection
               trials={test.trials}
               result={computedResult.shrinkageLimit ?? null}
+              method={test.method}
               onChangeTrials={onUpdateShrinkageLimitTrials}
+              onChangeMethod={(method) => onSyncResult({ ...test, method })}
             />
           )}
 

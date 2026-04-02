@@ -213,3 +213,174 @@ describe("Metadata Merging", () => {
     expect(merged.clientName).toBe("Initial Client");
   });
 });
+
+describe("Metadata Persistence", () => {
+  it("should persist project metadata in localStorage", () => {
+    const metadata: ProjectMetadata = {
+      projectName: "Persistent Project",
+      clientName: "Persistent Client",
+      labOrganization: "Persistent Lab",
+      dateReported: "2026-04-02",
+      checkedBy: "John Persistent",
+    };
+
+    const serialized = JSON.stringify(metadata);
+    const deserialized = JSON.parse(serialized) as ProjectMetadata;
+
+    expect(deserialized.projectName).toBe("Persistent Project");
+    expect(deserialized.labOrganization).toBe("Persistent Lab");
+    expect(deserialized.checkedBy).toBe("John Persistent");
+  });
+
+  it("should persist record metadata in localStorage", () => {
+    const metadata: RecordMetadata = {
+      sampleNumber: "PERSIST-001",
+      dateSubmitted: "2026-04-01",
+      dateTested: "2026-04-02",
+      testedBy: "Persistent Tech",
+    };
+
+    const serialized = JSON.stringify(metadata);
+    const deserialized = JSON.parse(serialized) as RecordMetadata;
+
+    expect(deserialized.sampleNumber).toBe("PERSIST-001");
+    expect(deserialized.testedBy).toBe("Persistent Tech");
+  });
+
+  it("should handle partial metadata deserialization", () => {
+    const partial = { projectName: "Partial Project" };
+    const serialized = JSON.stringify(partial);
+    const deserialized = JSON.parse(serialized);
+
+    expect(deserialized.projectName).toBe("Partial Project");
+    expect(deserialized.clientName).toBeUndefined();
+  });
+});
+
+describe("JSON Import/Export with Record Metadata", () => {
+  it("should include record metadata in JSON export", () => {
+    const record = {
+      id: "record-1",
+      title: "Record 1",
+      label: "Borehole A",
+      note: "Test note",
+      isExpanded: true,
+      tests: [],
+      results: {},
+      sampleNumber: "SAMPLE-001",
+      dateSubmitted: "2026-04-01",
+      dateTested: "2026-04-02",
+      testedBy: "Test Tech",
+    };
+
+    const payload = {
+      exportDate: new Date().toISOString(),
+      version: "3.0",
+      project: {
+        title: "Test",
+        records: [record],
+      },
+    };
+
+    expect(payload.project.records[0].sampleNumber).toBe("SAMPLE-001");
+    expect(payload.project.records[0].dateTested).toBe("2026-04-02");
+    expect(payload.project.records[0].testedBy).toBe("Test Tech");
+  });
+
+  it("should preserve record metadata during round-trip serialization", () => {
+    const original = {
+      sampleNumber: "S-ROUNDTRIP",
+      dateSubmitted: "2026-04-01",
+      dateTested: "2026-04-02",
+      testedBy: "RT Tech",
+    };
+
+    const serialized = JSON.stringify(original);
+    const deserialized = JSON.parse(serialized);
+
+    expect(deserialized.sampleNumber).toBe("S-ROUNDTRIP");
+    expect(deserialized.dateSubmitted).toBe("2026-04-01");
+    expect(deserialized.dateTested).toBe("2026-04-02");
+    expect(deserialized.testedBy).toBe("RT Tech");
+  });
+});
+
+describe("Complete Metadata Flow", () => {
+  it("should handle full project state with all metadata", () => {
+    const fullState = {
+      clientName: "Full Client",
+      projectName: "Full Project",
+      labOrganization: "Full Lab",
+      dateReported: "2026-04-02",
+      checkedBy: "Full Checker",
+      records: [
+        {
+          id: "rec-1",
+          title: "Record 1",
+          label: "Borehole A",
+          note: "Note A",
+          isExpanded: true,
+          tests: [],
+          results: {},
+          sampleNumber: "S-001",
+          dateSubmitted: "2026-04-01",
+          dateTested: "2026-04-02",
+          testedBy: "Tech A",
+        },
+        {
+          id: "rec-2",
+          title: "Record 2",
+          label: "Borehole B",
+          note: "Note B",
+          isExpanded: false,
+          tests: [],
+          results: {},
+          sampleNumber: "S-002",
+          dateSubmitted: "2026-04-01",
+          dateTested: "2026-04-03",
+          testedBy: "Tech B",
+        },
+      ],
+    };
+
+    const serialized = JSON.stringify(fullState);
+    const deserialized = JSON.parse(serialized);
+
+    expect(deserialized.clientName).toBe("Full Client");
+    expect(deserialized.labOrganization).toBe("Full Lab");
+    expect(deserialized.records.length).toBe(2);
+    expect(deserialized.records[0].sampleNumber).toBe("S-001");
+    expect(deserialized.records[1].testedBy).toBe("Tech B");
+  });
+
+  it("should export all metadata fields in comprehensive report", () => {
+    const exportData = {
+      title: "Comprehensive Report",
+      projectName: "Comprehensive Project",
+      clientName: "Comprehensive Client",
+      date: "2026-04-02",
+      labOrganization: "Comprehensive Lab",
+      dateReported: "2026-04-02",
+      checkedBy: "Comprehensive Checker",
+      fields: [
+        { label: "Liquid Limit", value: "35.5" },
+        { label: "Plastic Limit", value: "22.1" },
+        { label: "Plasticity Index", value: "13.4" },
+      ],
+      tables: [
+        {
+          title: "Record Summary",
+          headers: ["Record", "Sample #", "Date Tested", "Tested By", "LL", "PL", "PI"],
+          rows: [["Record 1", "S-001", "2026-04-02", "Tech A", "35.5", "22.1", "13.4"]],
+        },
+      ],
+    };
+
+    expect(exportData.labOrganization).toBe("Comprehensive Lab");
+    expect(exportData.dateReported).toBe("2026-04-02");
+    expect(exportData.checkedBy).toBe("Comprehensive Checker");
+    expect(exportData.tables[0].headers).toContain("Sample #");
+    expect(exportData.tables[0].headers).toContain("Date Tested");
+    expect(exportData.tables[0].headers).toContain("Tested By");
+  });
+});

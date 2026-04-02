@@ -90,6 +90,7 @@ export interface PlasticLimitTest extends AtterbergBaseTest {
 export interface ShrinkageLimitTest extends AtterbergBaseTest {
   type: "shrinkageLimit";
   trials: ShrinkageLimitTrial[];
+  method?: "volumetric" | "linear"; // Dual-method support (Phase 3)
 }
 
 export type AtterbergTest = LiquidLimitTest | PlasticLimitTest | ShrinkageLimitTest;

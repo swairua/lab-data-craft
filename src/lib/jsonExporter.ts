@@ -54,6 +54,9 @@ const normalizeLiquidLimitTrials = (value: unknown): LiquidLimitTrial[] => {
       trialNo: readString(item.trialNo) || String(index + 1),
       blows: readString(item.blows),
       moisture: readString(item.moisture),
+      cupMass: readString(item.cupMass),
+      wetMass: readString(item.wetMass),
+      dryMass: readString(item.dryMass),
     };
   });
 };
@@ -70,6 +73,9 @@ const normalizePlasticLimitTrials = (value: unknown): PlasticLimitTrial[] => {
       id: makeId("trial"),
       trialNo: readString(item.trialNo) || String(index + 1),
       moisture: readString(item.moisture),
+      cupMass: readString(item.cupMass),
+      wetMass: readString(item.wetMass),
+      dryMass: readString(item.dryMass),
     };
   });
 };
@@ -164,6 +170,7 @@ const normalizeLegacyTest = (value: Record<string, unknown>, index: number): Att
     isExpanded: typeof value.isExpanded === "boolean" ? value.isExpanded : true,
     trials: normalizeShrinkageLimitTrialsWithMigration(value.shrinkageLimitRows),
     result: normalizeResults(value.calculatedResults),
+    method: readString(value.method) as "volumetric" | "linear" | undefined,
   };
 };
 
@@ -184,7 +191,12 @@ const normalizeTest = (value: unknown, index: number): AtterbergTest => {
       case "plasticLimit":
         return { ...base, type: "plasticLimit", trials: normalizePlasticLimitTrials(test.trials) };
       case "shrinkageLimit":
-        return { ...base, type: "shrinkageLimit", trials: normalizeShrinkageLimitTrials(test.trials) };
+        return {
+          ...base,
+          type: "shrinkageLimit",
+          trials: normalizeShrinkageLimitTrials(test.trials),
+          method: readString(test.method) as "volumetric" | "linear" | undefined,
+        };
     }
   }
 

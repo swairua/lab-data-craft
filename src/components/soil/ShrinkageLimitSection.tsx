@@ -1,15 +1,26 @@
+import { useState } from "react";
 import { Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ShrinkageLimitTrial } from "@/context/TestDataContext";
-import { isShrinkageLimitTrialStarted, isShrinkageLimitTrialValid, sanitizeNumericInput } from "@/lib/atterbergCalculations";
+import {
+  isShrinkageLimitTrialStarted,
+  isShrinkageLimitTrialValid,
+  sanitizeNumericInput,
+  calculateLinearShrinkage,
+  calculateVolumetricShrinkage,
+  isLinearShrinkageTrialValid,
+} from "@/lib/atterbergCalculations";
 import { cn } from "@/lib/utils";
 
 interface ShrinkageLimitSectionProps {
   trials: ShrinkageLimitTrial[];
   result: number | null;
+  method?: "volumetric" | "linear";
   onChangeTrials: (trials: ShrinkageLimitTrial[]) => void;
+  onChangeMethod?: (method: "volumetric" | "linear") => void;
 }
 
 const createTrial = (index: number): ShrinkageLimitTrial => ({
@@ -20,7 +31,7 @@ const createTrial = (index: number): ShrinkageLimitTrial => ({
   moisture: "",
 });
 
-const ShrinkageLimitSection = ({ trials, result, onChangeTrials }: ShrinkageLimitSectionProps) => {
+const ShrinkageLimitSection = ({ trials, result, method = "volumetric", onChangeTrials, onChangeMethod }: ShrinkageLimitSectionProps) => {
   const updateTrial = (index: number, field: keyof ShrinkageLimitTrial, value: string) => {
     onChangeTrials(
       trials.map((trial, trialIndex) =>
@@ -47,11 +58,29 @@ const ShrinkageLimitSection = ({ trials, result, onChangeTrials }: ShrinkageLimi
     onChangeTrials(nextTrials.map((trial, trialIndex) => ({ ...trial, trialNo: String(trialIndex + 1) })));
   };
 
+  const isTrialValidForMethod = (trial: ShrinkageLimitTrial): boolean => {
+    if (method === "linear") {
+      return isLinearShrinkageTrialValid(trial);
+    }
+    return isShrinkageLimitTrialValid(trial);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Provide trial volume readings and moisture content.</span>
-        <span>Incomplete rows are ignored in the SL average.</span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between text-xs text-muted-foreground flex-1">
+          <span>{method === "linear" ? "Provide length measurements." : "Provide trial volume readings and moisture content."}</span>
+          <span>Incomplete rows are ignored.</span>
+        </div>
+        <Select value={method} onValueChange={(value) => onChangeMethod?.(value as "volumetric" | "linear")}>
+          <SelectTrigger className="w-[140px] h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="volumetric">Volumetric</SelectItem>
+            <SelectItem value="linear">Linear</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -60,8 +89,12 @@ const ShrinkageLimitSection = ({ trials, result, onChangeTrials }: ShrinkageLimi
             <thead>
               <tr className="bg-muted border-b">
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Trial</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Initial Volume</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Final Volume</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  {method === "linear" ? "Initial Length (mm)" : "Initial Volume"}
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  {method === "linear" ? "Final Length (mm)" : "Final Volume"}
+                </th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Moisture Content (%)</th>
                 <th className="w-10" />
               </tr>
@@ -69,7 +102,7 @@ const ShrinkageLimitSection = ({ trials, result, onChangeTrials }: ShrinkageLimi
             <tbody>
               {trials.map((trial, index) => {
                 const started = isShrinkageLimitTrialStarted(trial);
-                const valid = isShrinkageLimitTrialValid(trial);
+                const valid = isTrialValidForMethod(trial);
 
                 return (
                   <tr
@@ -137,9 +170,16 @@ const ShrinkageLimitSection = ({ trials, result, onChangeTrials }: ShrinkageLimi
 
       <div className="rounded-lg border bg-muted/40 p-3">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground">Shrinkage Limit (SL)</span>
+          <span className="text-sm font-medium text-muted-foreground">
+            {method === "linear" ? "Linear Shrinkage (LS)" : "Shrinkage Limit (SL)"}
+          </span>
           <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{result !== null ? `${result}%` : "-"}</span>
         </div>
+        {method === "linear" && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Linear shrinkage = (Initial Length - Final Length) / Initial Length × 100
+          </p>
+        )}
       </div>
     </div>
   );
