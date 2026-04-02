@@ -163,18 +163,38 @@ const normalizeRecord = (value: unknown, index: number): AtterbergRecord => {
     isExpanded: typeof record.isExpanded === "boolean" ? record.isExpanded : true,
     tests,
     results: normalizeResults(record.results),
+    // Record metadata (Phase 1)
+    sampleNumber: readString(record.sampleNumber),
+    dateSubmitted: readString(record.dateSubmitted),
+    dateTested: readString(record.dateTested),
+    testedBy: readString(record.testedBy),
   };
 };
 
 export const normalizeAtterbergProjectState = (value: unknown): AtterbergProjectState | null => {
   if (!isObject(value)) return null;
 
+  // Extract project-level metadata
+  const getProjectMetadata = (obj: Record<string, unknown>) => ({
+    clientName: readString(obj.clientName),
+    projectName: readString(obj.projectName),
+    labOrganization: readString(obj.labOrganization),
+    dateReported: readString(obj.dateReported),
+    checkedBy: readString(obj.checkedBy),
+  });
+
   if (Array.isArray(value.records)) {
-    return { records: value.records.map((record, index) => normalizeRecord(record, index)) };
+    return {
+      records: value.records.map((record, index) => normalizeRecord(record, index)),
+      ...getProjectMetadata(value),
+    };
   }
 
   if (isObject(value.project) && Array.isArray(value.project.records)) {
-    return { records: value.project.records.map((record, index) => normalizeRecord(record, index)) };
+    return {
+      records: value.project.records.map((record, index) => normalizeRecord(record, index)),
+      ...getProjectMetadata(value.project),
+    };
   }
 
   if (Array.isArray(value.tests)) {
@@ -190,6 +210,7 @@ export const normalizeAtterbergProjectState = (value: unknown): AtterbergProject
           results: {},
         },
       ],
+      ...getProjectMetadata(value),
     };
   }
 
