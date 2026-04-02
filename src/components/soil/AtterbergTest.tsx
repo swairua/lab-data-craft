@@ -9,10 +9,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useProject } from "@/context/ProjectContext";
 import {
-  useTestData,
   type AtterbergProjectState,
   type AtterbergRecord,
   type AtterbergTest,
@@ -24,16 +24,19 @@ import {
 import { generateTestCSV } from "@/lib/csvExporter";
 import { generateTestPDF } from "@/lib/pdfGenerator";
 import {
-  calculatePlasticityIndex,
+  buildAtterbergSummaryFields,
+  calculateProjectResults,
   calculateRecordResults,
   calculateTestResult,
+  countCompletedTests,
   countRecordDataPoints,
-  countValidTrials,
+  deriveAtterbergStatus,
   getActiveResultValue,
   isLiquidLimitTrialValid,
   isPlasticLimitTrialValid,
   isShrinkageLimitTrialValid,
 } from "@/lib/atterbergCalculations";
+import { useTestReport } from "@/hooks/useTestReport";
 import {
   downloadJSON,
   exportAsJSON,
@@ -137,9 +140,6 @@ const createRecord = (index: number): AtterbergRecord => ({
   results: {},
 });
 
-const isNumber = (value: number | undefined | null): value is number => typeof value === "number" && Number.isFinite(value);
-const average = (values: number[]) => (values.length > 0 ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)) : null);
-
 const buildPersistedState = (records: ComputedRecord[]): AtterbergProjectState => ({
   records: records.map(({ dataPoints, completedTests, ...record }) => record),
 });
@@ -157,7 +157,6 @@ const updateTrialsForType = (test: AtterbergTest, trials: AtterbergTest["trials"
 
 const AtterbergTest = () => {
   const project = useProject();
-  const { updateTest: updateTestSummary } = useTestData();
   const [projectState, setProjectState] = useState<AtterbergProjectState>({ records: [] });
   const hydratedRef = useRef(false);
 
@@ -177,7 +176,7 @@ const AtterbergTest = () => {
       return {
         ...recordWithComputedTests,
         dataPoints: countRecordDataPoints(recordWithComputedTests),
-        completedTests: tests.filter((test) => getActiveResultValue(test) !== null).length,
+        completedTests: countCompletedTests(recordWithComputedTests),
       };
     });
   }, [projectState.records]);
@@ -206,40 +205,21 @@ const AtterbergTest = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
   }, [persistedState]);
 
-  const { totalDataPoints, aggregateResults, status } = useMemo(() => {
-    const liquidLimitValues = computedRecords.map((record) => record.results.liquidLimit).filter(isNumber);
-    const plasticLimitValues = computedRecords.map((record) => record.results.plasticLimit).filter(isNumber);
-    const shrinkageLimitValues = computedRecords.map((record) => record.results.shrinkageLimit).filter(isNumber);
-
-    const liquidLimit = average(liquidLimitValues);
-    const plasticLimit = average(plasticLimitValues);
-    const shrinkageLimit = average(shrinkageLimitValues);
-    const plasticityIndex = calculatePlasticityIndex(liquidLimit, plasticLimit);
+  const { totalDataPoints, aggregateResults, aggregateProjectResults, status, totalCompletedTests } = useMemo(() => {
     const totalPoints = computedRecords.reduce((sum, record) => sum + record.dataPoints, 0);
     const completedTests = computedRecords.reduce((sum, record) => sum + record.completedTests, 0);
-    const nextStatus = totalPoints === 0 ? "not-started" : completedTests > 0 ? "completed" : "in-progress";
+    const projectResults = calculateProjectResults(computedRecords);
 
     return {
       totalDataPoints: totalPoints,
-      status: nextStatus,
-      aggregateResults: [
-        { label: "Avg LL", value: liquidLimit !== null ? `${liquidLimit}%` : "" },
-        { label: "Avg PL", value: plasticLimit !== null ? `${plasticLimit}%` : "" },
-        { label: "Avg SL", value: shrinkageLimit !== null ? `${shrinkageLimit}%` : "" },
-        { label: "Avg PI", value: plasticityIndex !== null ? `${plasticityIndex}%` : "" },
-        { label: "Records", value: String(computedRecords.length) },
-        { label: "Valid Data Points", value: String(totalPoints) },
-      ],
+      totalCompletedTests: completedTests,
+      aggregateProjectResults: projectResults,
+      status: deriveAtterbergStatus(totalPoints, completedTests),
+      aggregateResults: buildAtterbergSummaryFields(projectResults, computedRecords.length, totalPoints),
     };
   }, [computedRecords]);
 
-  useEffect(() => {
-    updateTestSummary("atterberg", {
-      status,
-      dataPoints: totalDataPoints,
-      keyResults: aggregateResults.filter((item) => item.value),
-    });
-  }, [aggregateResults, status, totalDataPoints, updateTestSummary]);
+  useTestReport("atterberg", totalDataPoints, aggregateResults);
 
   const updateRecord = useCallback((recordId: string, updater: (record: AtterbergRecord) => AtterbergRecord) => {
     setProjectState((prev) => ({
@@ -292,15 +272,23 @@ const AtterbergTest = () => {
 
   const updateTestType = useCallback(
     (recordId: string, testId: string, type: AtterbergTestType) => {
-      updateTest(recordId, testId, (test) => ({
-        ...test,
-        type,
-        isExpanded: true,
-        trials: createTrialsForType(type) as AtterbergTest["trials"],
-        result: {},
-      } as AtterbergTest));
+      updateRecord(recordId, (record) => ({
+        ...record,
+        tests: record.tests.map((test) => {
+          if (test.id !== testId) return test;
+
+          return {
+            ...test,
+            title: buildTestTitle(type, record.tests.filter((item) => item.id !== testId)),
+            type,
+            isExpanded: true,
+            trials: createTrialsForType(type) as AtterbergTest["trials"],
+            result: {},
+          } as AtterbergTest;
+        }),
+      }));
     },
-    [updateTest],
+    [updateRecord],
   );
 
   const syncComputedTest = useCallback(
@@ -414,12 +402,14 @@ const AtterbergTest = () => {
     >
       <div className="space-y-4 print:space-y-3">
         <Card className="border bg-muted/20 shadow-none print:border-border print:bg-transparent">
-          <CardContent className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-6">
+          <CardContent className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
             <OverviewMetric label="Project" value={project.projectName || "Current project"} />
             <OverviewMetric label="Client" value={project.clientName || "-"} />
             <OverviewMetric label="Date" value={project.date || "-"} />
             <OverviewMetric label="Records" value={String(computedRecords.length)} />
+            <OverviewMetric label="Completed Tests" value={String(totalCompletedTests)} />
             <OverviewMetric label="Valid Data Points" value={String(totalDataPoints)} />
+            <OverviewMetric label="Avg PI" value={aggregateProjectResults.plasticityIndex !== undefined ? `${aggregateProjectResults.plasticityIndex}%` : "-"} />
             <OverviewMetric label="Status" value={status} className="capitalize" />
           </CardContent>
         </Card>
@@ -523,6 +513,8 @@ const RecordCard = ({
   onUpdateShrinkageLimitTrials,
   onSyncTest,
 }: RecordCardProps) => {
+  const [nextTestType, setNextTestType] = useState<AtterbergTestType>("liquidLimit");
+
   const resultCards = [
     { label: "LL", value: record.results.liquidLimit, tone: "blue" },
     { label: "PL", value: record.results.plasticLimit, tone: "emerald" },
@@ -543,11 +535,21 @@ const RecordCard = ({
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                   <span className="text-sm font-semibold text-muted-foreground">Record {recordIndex + 1}</span>
-                  <Input value={record.title} onChange={(event) => onUpdateTitle(event.target.value)} className="h-9 max-w-xl" placeholder="Record title" />
+                  <Input value={record.title} onChange={(event) => onUpdateTitle(event.target.value)} className="h-9 max-w-xl" placeholder="Record title, borehole, or sample group" />
                 </div>
 
-                <div className="flex items-center gap-2 print:hidden">
-                  <Button type="button" variant="outline" className="gap-2" onClick={() => onAddTest("liquidLimit")}>
+                <div className="flex flex-wrap items-center gap-2 print:hidden">
+                  <Select value={nextTestType} onValueChange={(value) => setNextTestType(value as AtterbergTestType)}>
+                    <SelectTrigger className="h-9 w-[180px] bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="liquidLimit">Liquid Limit</SelectItem>
+                      <SelectItem value="plasticLimit">Plastic Limit</SelectItem>
+                      <SelectItem value="shrinkageLimit">Shrinkage Limit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" variant="outline" className="gap-2" onClick={() => onAddTest(nextTestType)}>
                     <Plus className="h-4 w-4" /> Add Test
                   </Button>
                   <Button
@@ -564,7 +566,7 @@ const RecordCard = ({
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <div className="text-xs font-medium text-muted-foreground">Identifier / Sample Group</div>
+                  <div className="text-xs font-medium text-muted-foreground">Identifier / Borehole / Sample Group</div>
                   <Input value={record.label} onChange={(event) => onUpdateLabel(event.target.value)} className="h-9" placeholder="Sample ID, borehole, depth, etc." />
                 </div>
                 <div className="space-y-1">
@@ -580,7 +582,7 @@ const RecordCard = ({
           <CardContent className="space-y-4 pt-0">
             {record.tests.length === 0 ? (
               <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-                No tests added yet. Add one or more liquid, plastic, or shrinkage limit tests for this record.
+                No tests added yet. Add one or more liquid, plastic, or shrinkage limit tests for this borehole or sample record.
               </div>
             ) : (
               <div className="space-y-3">
@@ -637,10 +639,11 @@ const RecordCard = ({
 const buildTablesForExport = (records: ComputedRecord[]) => {
   const recordSummaryTable = {
     title: "Record Summary",
-    headers: ["Record", "Identifier", "LL (%)", "PL (%)", "SL (%)", "PI (%)", "Valid Points"],
+    headers: ["Record", "Identifier", "Note", "LL (%)", "PL (%)", "SL (%)", "PI (%)", "Valid Points"],
     rows: records.map((record) => [
       record.title,
       record.label || "-",
+      record.note || "-",
       record.results.liquidLimit !== undefined ? String(record.results.liquidLimit) : "-",
       record.results.plasticLimit !== undefined ? String(record.results.plasticLimit) : "-",
       record.results.shrinkageLimit !== undefined ? String(record.results.shrinkageLimit) : "-",
@@ -655,12 +658,12 @@ const buildTablesForExport = (records: ComputedRecord[]) => {
         if (test.type === "liquidLimit") {
           const rows = test.trials
             .filter(isLiquidLimitTrialValid)
-            .map((trial) => [record.title, record.label || "-", test.title, trial.trialNo, trial.blows, trial.moisture, test.result.liquidLimit !== undefined ? String(test.result.liquidLimit) : "-"]);
+            .map((trial) => [record.title, record.label || "-", record.note || "-", test.title, "Liquid Limit", trial.trialNo, trial.blows, trial.moisture, test.result.liquidLimit !== undefined ? String(test.result.liquidLimit) : "-"]);
 
           return rows.length > 0
             ? {
                 title: `${record.title} - ${test.title} (Liquid Limit)`,
-                headers: ["Record", "Identifier", "Test", "Trial", "Blows", "Moisture (%)", "LL (%)"],
+                headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Blows", "Moisture (%)", "LL (%)"],
                 rows,
               }
             : null;
@@ -669,12 +672,12 @@ const buildTablesForExport = (records: ComputedRecord[]) => {
         if (test.type === "plasticLimit") {
           const rows = test.trials
             .filter(isPlasticLimitTrialValid)
-            .map((trial) => [record.title, record.label || "-", test.title, trial.trialNo, trial.moisture, test.result.plasticLimit !== undefined ? String(test.result.plasticLimit) : "-"]);
+            .map((trial) => [record.title, record.label || "-", record.note || "-", test.title, "Plastic Limit", trial.trialNo, trial.moisture, test.result.plasticLimit !== undefined ? String(test.result.plasticLimit) : "-"]);
 
           return rows.length > 0
             ? {
                 title: `${record.title} - ${test.title} (Plastic Limit)`,
-                headers: ["Record", "Identifier", "Test", "Trial", "Moisture (%)", "PL (%)"],
+                headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Moisture (%)", "PL (%)"],
                 rows,
               }
             : null;
@@ -685,7 +688,9 @@ const buildTablesForExport = (records: ComputedRecord[]) => {
           .map((trial) => [
             record.title,
             record.label || "-",
+            record.note || "-",
             test.title,
+            "Shrinkage Limit",
             trial.trialNo,
             trial.initialVolume,
             trial.finalVolume,
@@ -696,7 +701,7 @@ const buildTablesForExport = (records: ComputedRecord[]) => {
         return rows.length > 0
           ? {
               title: `${record.title} - ${test.title} (Shrinkage Limit)`,
-              headers: ["Record", "Identifier", "Test", "Trial", "Initial Volume", "Final Volume", "Moisture (%)", "SL (%)"],
+              headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Initial Volume", "Final Volume", "Moisture (%)", "SL (%)"],
               rows,
             }
           : null;
