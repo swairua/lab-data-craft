@@ -18,6 +18,9 @@ export interface AtterbergExportPayload {
     title?: string;
     clientName?: string;
     date?: string;
+    labOrganization?: string;
+    dateReported?: string;
+    checkedBy?: string;
     records: AtterbergRecord[];
   };
 }
@@ -89,6 +92,43 @@ const normalizeShrinkageLimitTrials = (value: unknown): ShrinkageLimitTrial[] =>
   });
 };
 
+// Backwards compatibility for legacy shrinkage data
+const migrateLegacyShrinkageData = (trial: unknown): ShrinkageLimitTrial => {
+  const item = isObject(trial) ? trial : {};
+
+  // Handle legacy format where shrinkage data might be stored differently
+  let initialVolume = readString(item.initialVolume) || readString(item.initialLength) || "";
+  let finalVolume = readString(item.finalVolume) || readString(item.finalLength) || "";
+
+  // Support alternative field names for backwards compatibility
+  if (!initialVolume && item.volume1) {
+    initialVolume = readString(item.volume1);
+  }
+  if (!finalVolume && item.volume2) {
+    finalVolume = readString(item.volume2);
+  }
+
+  return {
+    id: makeId("trial"),
+    trialNo: readString(item.trialNo) || String(1),
+    initialVolume: initialVolume,
+    finalVolume: finalVolume,
+    moisture: readString(item.moisture) || "",
+    initialMass: readString(item.initialMass),
+    finalMass: readString(item.finalMass),
+    dryMass: readString(item.dryMass),
+  };
+};
+
+const normalizeShrinkageLimitTrialsWithMigration = (value: unknown): ShrinkageLimitTrial[] => {
+  const trials = Array.isArray(value) ? value : [];
+  if (trials.length === 0) {
+    return [{ id: makeId("trial"), trialNo: "1", initialVolume: "", finalVolume: "", moisture: "" }];
+  }
+
+  return trials.map((trial) => migrateLegacyShrinkageData(trial));
+};
+
 const normalizeLegacyTest = (value: Record<string, unknown>, index: number): AtterbergTest => {
   const type =
     value.testType === "liquidLimit" || value.testType === "plasticLimit" || value.testType === "shrinkageLimit"
@@ -122,7 +162,7 @@ const normalizeLegacyTest = (value: Record<string, unknown>, index: number): Att
     title: readString(value.testTitle) || `Shrinkage Limit ${index + 1}`,
     type,
     isExpanded: typeof value.isExpanded === "boolean" ? value.isExpanded : true,
-    trials: normalizeShrinkageLimitTrials(value.shrinkageLimitRows),
+    trials: normalizeShrinkageLimitTrialsWithMigration(value.shrinkageLimitRows),
     result: normalizeResults(value.calculatedResults),
   };
 };

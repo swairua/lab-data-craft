@@ -250,3 +250,125 @@ export const getLiquidLimitGraphData = (trials: LiquidLimitTrial[]) =>
     moisture: trial.moisture,
     trial: trial.trialNo,
   }));
+
+// ===== Mass Calculation Helpers (Phase 2) =====
+
+export const calculateMoistureFromMass = (wetMass: number, dryMass: number): number | null => {
+  if (!isNumber(wetMass) || !isNumber(dryMass) || dryMass <= 0 || wetMass <= dryMass) {
+    return null;
+  }
+  const waterMass = wetMass - dryMass;
+  return round((waterMass / dryMass) * 100);
+};
+
+export const validateLiquidLimitTrialMass = (trial: LiquidLimitTrial): boolean => {
+  const hasRequiredMass = isFiniteNumber(trial.wetMass) && isFiniteNumber(trial.dryMass);
+  if (!hasRequiredMass) return true; // Mass is optional
+
+  const wetMass = Number(trial.wetMass);
+  const dryMass = Number(trial.dryMass);
+  return dryMass > 0 && wetMass > dryMass;
+};
+
+export const validatePlasticLimitTrialMass = (trial: PlasticLimitTrial): boolean => {
+  const hasRequiredMass = isFiniteNumber(trial.wetMass) && isFiniteNumber(trial.dryMass);
+  if (!hasRequiredMass) return true; // Mass is optional
+
+  const wetMass = Number(trial.wetMass);
+  const dryMass = Number(trial.dryMass);
+  return dryMass > 0 && wetMass > dryMass;
+};
+
+export const validateShrinkageLimitTrialMass = (trial: ShrinkageLimitTrial): boolean => {
+  const hasRequiredMass = isFiniteNumber(trial.initialMass) && isFiniteNumber(trial.finalMass) && isFiniteNumber(trial.dryMass);
+  if (!hasRequiredMass) return true; // Mass is optional
+
+  const initialMass = Number(trial.initialMass);
+  const finalMass = Number(trial.finalMass);
+  const dryMass = Number(trial.dryMass);
+  return dryMass > 0 && initialMass > 0 && finalMass > 0;
+};
+
+export const getAverageMoisture = (trials: (LiquidLimitTrial | PlasticLimitTrial)[]): number | null => {
+  const validMoistures = trials
+    .map((trial) => Number(trial.moisture))
+    .filter(isNumber);
+
+  if (validMoistures.length === 0) return null;
+  return round(validMoistures.reduce((sum, m) => sum + m, 0) / validMoistures.length);
+};
+
+export const getMassDataSummary = (trials: (LiquidLimitTrial | PlasticLimitTrial)[]): {
+  totalWithMass: number;
+  totalTrials: number;
+} | null => {
+  if (trials.length === 0) return null;
+
+  const trialsWithMass = trials.filter((trial) =>
+    isFiniteNumber(trial.wetMass) && isFiniteNumber(trial.dryMass)
+  );
+
+  return {
+    totalWithMass: trialsWithMass.length,
+    totalTrials: trials.length,
+  };
+};
+
+// ===== Linear Shrinkage Calculations (Phase 3) =====
+
+export const isLinearShrinkageTrialValid = (trial: ShrinkageLimitTrial): boolean => {
+  const initialLength = Number(trial.initialVolume);
+  const finalLength = Number(trial.finalVolume);
+  return (
+    isFiniteNumber(trial.initialVolume) &&
+    isFiniteNumber(trial.finalVolume) &&
+    isFiniteNumber(trial.moisture) &&
+    initialLength > 0 &&
+    finalLength > 0 &&
+    finalLength <= initialLength
+  );
+};
+
+export const calculateLinearShrinkage = (trials: ShrinkageLimitTrial[]): number | null => {
+  const validTrials = trials.filter(isLinearShrinkageTrialValid);
+  if (validTrials.length === 0) return null;
+
+  const shrinkages = validTrials.map((trial) => {
+    const initialLength = Number(trial.initialVolume);
+    const finalLength = Number(trial.finalVolume);
+    return ((initialLength - finalLength) / initialLength) * 100;
+  });
+
+  const average = shrinkages.reduce((sum, s) => sum + s, 0) / shrinkages.length;
+  return round(average);
+};
+
+export const getValidLinearShrinkageTrials = (trials: ShrinkageLimitTrial[]) =>
+  trials
+    .filter(isLinearShrinkageTrialValid)
+    .map((trial) => ({
+      initialLength: Number(trial.initialVolume),
+      finalLength: Number(trial.finalVolume),
+      moisture: Number(trial.moisture),
+      trialNo: trial.trialNo,
+    }));
+
+// ===== Volumetric Shrinkage (Original) (Phase 3) =====
+
+export const isVolumetricShrinkageTrialValid = (trial: ShrinkageLimitTrial): boolean => {
+  return isShrinkageLimitTrialValid(trial);
+};
+
+export const calculateVolumetricShrinkage = (trials: ShrinkageLimitTrial[]): number | null => {
+  const validTrials = trials.filter(isVolumetricShrinkageTrialValid);
+  if (validTrials.length === 0) return null;
+
+  const shrinkages = validTrials.map((trial) => {
+    const initialVolume = Number(trial.initialVolume);
+    const finalVolume = Number(trial.finalVolume);
+    return ((initialVolume - finalVolume) / initialVolume) * 100;
+  });
+
+  const average = shrinkages.reduce((sum, s) => sum + s, 0) / shrinkages.length;
+  return round(average);
+};

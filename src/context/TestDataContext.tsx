@@ -11,6 +11,23 @@ export interface TestSummary {
   keyResults: { label: string; value: string }[];
 }
 
+// Generic project-level metadata (used across all test types)
+export interface ProjectMetadata {
+  clientName?: string;
+  projectName?: string;
+  labOrganization?: string;
+  dateReported?: string;
+  checkedBy?: string;
+}
+
+// Generic record-level metadata (used across test types)
+export interface RecordMetadata {
+  sampleNumber?: string;
+  dateSubmitted?: string;
+  dateTested?: string;
+  testedBy?: string;
+}
+
 export type AtterbergTestType = "liquidLimit" | "plasticLimit" | "shrinkageLimit";
 
 export interface LiquidLimitTrial {
@@ -18,12 +35,20 @@ export interface LiquidLimitTrial {
   trialNo: string;
   blows: string;
   moisture: string;
+  // Field metadata - mass measurements
+  cupMass?: string;
+  wetMass?: string;
+  dryMass?: string;
 }
 
 export interface PlasticLimitTrial {
   id: string;
   trialNo: string;
   moisture: string;
+  // Field metadata - mass measurements
+  cupMass?: string;
+  wetMass?: string;
+  dryMass?: string;
 }
 
 export interface ShrinkageLimitTrial {
@@ -32,6 +57,10 @@ export interface ShrinkageLimitTrial {
   initialVolume: string;
   finalVolume: string;
   moisture: string;
+  // Field metadata - mass measurements
+  initialMass?: string;
+  finalMass?: string;
+  dryMass?: string;
 }
 
 export interface CalculatedResults {
@@ -96,6 +125,10 @@ export interface AtterbergProjectState extends AtterbergProjectMetadata {
 interface TestDataContextType {
   tests: Record<string, TestSummary>;
   updateTest: (id: string, data: Partial<Omit<TestSummary, "id">>) => void;
+  projectMetadata: ProjectMetadata;
+  updateProjectMetadata: (data: Partial<ProjectMetadata>) => void;
+  recordMetadata: Record<string, RecordMetadata>;
+  updateRecordMetadata: (testId: string, data: Partial<RecordMetadata>) => void;
 }
 
 const defaultTests: Record<string, TestSummary> = {
@@ -121,12 +154,18 @@ const defaultTests: Record<string, TestSummary> = {
 const TestDataContext = createContext<TestDataContextType>({
   tests: defaultTests,
   updateTest: () => {},
+  projectMetadata: {},
+  updateProjectMetadata: () => {},
+  recordMetadata: {},
+  updateRecordMetadata: () => {},
 });
 
 export const useTestData = () => useContext(TestDataContext);
 
 export const TestDataProvider = ({ children }: { children: ReactNode }) => {
   const [tests, setTests] = useState<Record<string, TestSummary>>(defaultTests);
+  const [projectMetadata, setProjectMetadata] = useState<ProjectMetadata>({});
+  const [recordMetadata, setRecordMetadata] = useState<Record<string, RecordMetadata>>({});
 
   const updateTest = useCallback((id: string, data: Partial<Omit<TestSummary, "id">>) => {
     setTests((prev) => ({
@@ -135,5 +174,22 @@ export const TestDataProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, []);
 
-  return <TestDataContext.Provider value={{ tests, updateTest }}>{children}</TestDataContext.Provider>;
+  const updateProjectMetadata = useCallback((data: Partial<ProjectMetadata>) => {
+    setProjectMetadata((prev) => ({ ...prev, ...data }));
+  }, []);
+
+  const updateRecordMetadata = useCallback((testId: string, data: Partial<RecordMetadata>) => {
+    setRecordMetadata((prev) => ({
+      ...prev,
+      [testId]: { ...prev[testId], ...data },
+    }));
+  }, []);
+
+  return (
+    <TestDataContext.Provider
+      value={{ tests, updateTest, projectMetadata, updateProjectMetadata, recordMetadata, updateRecordMetadata }}
+    >
+      {children}
+    </TestDataContext.Provider>
+  );
 };

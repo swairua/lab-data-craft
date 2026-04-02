@@ -2,10 +2,13 @@ import { useState, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { ProjectContext } from "@/context/ProjectContext";
+import { useTestData } from "@/context/TestDataContext";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { ChevronDown } from "lucide-react";
 import { FlaskConical, Mountain, Hammer, TestTubeDiagonal, LayoutDashboard, FileText } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import GradingTest from "@/components/soil/GradingTest";
 import AtterbergTest from "@/components/soil/AtterbergTest";
@@ -37,6 +40,7 @@ interface IndexProps {
 const Index = ({ initialTab }: IndexProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const testData = useTestData();
   const isTestsPage = location.pathname === "/tests";
   const isReportsPage = location.pathname === "/reports";
   const [view, setView] = useState<"dashboard" | "tests" | "reports">(
@@ -44,9 +48,25 @@ const Index = ({ initialTab }: IndexProps) => {
   );
   const [projectName, setProjectName] = useState("");
   const [clientName, setClientName] = useState("");
+  const [showAdvancedMetadata, setShowAdvancedMetadata] = useState(false);
   const today = new Date().toISOString().split("T")[0];
 
   const projectCtx = useMemo(() => ({ projectName, clientName, date: today }), [projectName, clientName, today]);
+
+  // Sync project metadata to TestDataContext
+  const handleProjectNameChange = (value: string) => {
+    setProjectName(value);
+    testData.updateProjectMetadata({ projectName: value });
+  };
+
+  const handleClientNameChange = (value: string) => {
+    setClientName(value);
+    testData.updateProjectMetadata({ clientName: value });
+  };
+
+  const handleMetadataChange = (key: keyof typeof testData.projectMetadata, value: string) => {
+    testData.updateProjectMetadata({ [key]: value });
+  };
 
   return (
     <ProjectContext.Provider value={projectCtx}>
@@ -92,17 +112,56 @@ const Index = ({ initialTab }: IndexProps) => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Project Name</Label>
-                <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Enter project name" className="h-9" />
+                <Input value={projectName} onChange={(e) => handleProjectNameChange(e.target.value)} placeholder="Enter project name" className="h-9" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Client Name</Label>
-                <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Enter client name" className="h-9" />
+                <Input value={clientName} onChange={(e) => handleClientNameChange(e.target.value)} placeholder="Enter client name" className="h-9" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Date</Label>
                 <Input value={today} readOnly className="h-9 calculated-field cursor-default" />
               </div>
             </div>
+            <Collapsible open={showAdvancedMetadata} onOpenChange={setShowAdvancedMetadata} className="mt-3 border-t pt-3">
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1.5 h-8 px-2 text-xs">
+                  <ChevronDown className="h-4 w-4 transition-transform" style={{ transform: showAdvancedMetadata ? "rotate(180deg)" : "rotate(0deg)" }} />
+                  Advanced Metadata
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-3 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Lab Organization</Label>
+                    <Input
+                      value={testData.projectMetadata.labOrganization || ""}
+                      onChange={(e) => handleMetadataChange("labOrganization", e.target.value)}
+                      placeholder="Enter lab organization"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Date Reported</Label>
+                    <Input
+                      type="date"
+                      value={testData.projectMetadata.dateReported || ""}
+                      onChange={(e) => handleMetadataChange("dateReported", e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Checked By</Label>
+                    <Input
+                      value={testData.projectMetadata.checkedBy || ""}
+                      onChange={(e) => handleMetadataChange("checkedBy", e.target.value)}
+                      placeholder="Enter name of person who checked"
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </header>
 
