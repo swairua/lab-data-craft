@@ -232,8 +232,16 @@ const AtterbergTest = () => {
 
   useTestReport("atterberg", totalDataPoints, aggregateResults, status);
 
+  const updateProjectMetadata = useCallback((updater: (state: AtterbergProjectState) => Partial<AtterbergProjectState>) => {
+    setProjectState((prev) => ({
+      ...prev,
+      ...updater(prev),
+    }));
+  }, []);
+
   const updateRecord = useCallback((recordId: string, updater: (record: AtterbergRecord) => AtterbergRecord) => {
     setProjectState((prev) => ({
+      ...prev,
       records: prev.records.map((record) => (record.id === recordId ? updater(record) : record)),
     }));
   }, []);

@@ -73,9 +73,23 @@ export interface AtterbergRecord {
   isExpanded: boolean;
   tests: AtterbergTest[];
   results: CalculatedResults;
+  // Record-level metadata (Phase 1)
+  sampleNumber?: string;
+  dateSubmitted?: string;
+  dateTested?: string;
+  testedBy?: string;
 }
 
-export interface AtterbergProjectState {
+export interface AtterbergProjectMetadata {
+  // Project-level metadata (Phase 1)
+  clientName?: string;
+  projectName?: string;
+  labOrganization?: string;
+  dateReported?: string;
+  checkedBy?: string;
+}
+
+export interface AtterbergProjectState extends AtterbergProjectMetadata {
   records: AtterbergRecord[];
 }
 
