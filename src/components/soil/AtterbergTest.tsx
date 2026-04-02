@@ -710,12 +710,25 @@ const buildTablesForExport = (records: ComputedRecord[]) => {
         if (test.type === "liquidLimit") {
           const rows = test.trials
             .filter(isLiquidLimitTrialValid)
-            .map((trial) => [record.title, record.label || "-", record.note || "-", test.title, "Liquid Limit", trial.trialNo, trial.blows, trial.moisture, test.result.liquidLimit !== undefined ? String(test.result.liquidLimit) : "-"]);
+            .map((trial) => [
+              record.title,
+              record.label || "-",
+              record.note || "-",
+              test.title,
+              "Liquid Limit",
+              trial.trialNo,
+              trial.blows,
+              trial.moisture,
+              trial.cupMass || "-",
+              trial.wetMass || "-",
+              trial.dryMass || "-",
+              test.result.liquidLimit !== undefined ? String(test.result.liquidLimit) : "-",
+            ]);
 
           return rows.length > 0
             ? {
                 title: `${record.title} - ${test.title} (Liquid Limit)`,
-                headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Blows", "Moisture (%)", "LL (%)"],
+                headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Blows", "Moisture (%)", "Cup Mass (g)", "Wet Mass (g)", "Dry Mass (g)", "LL (%)"],
                 rows,
               }
             : null;
@@ -724,12 +737,24 @@ const buildTablesForExport = (records: ComputedRecord[]) => {
         if (test.type === "plasticLimit") {
           const rows = test.trials
             .filter(isPlasticLimitTrialValid)
-            .map((trial) => [record.title, record.label || "-", record.note || "-", test.title, "Plastic Limit", trial.trialNo, trial.moisture, test.result.plasticLimit !== undefined ? String(test.result.plasticLimit) : "-"]);
+            .map((trial) => [
+              record.title,
+              record.label || "-",
+              record.note || "-",
+              test.title,
+              "Plastic Limit",
+              trial.trialNo,
+              trial.moisture,
+              trial.cupMass || "-",
+              trial.wetMass || "-",
+              trial.dryMass || "-",
+              test.result.plasticLimit !== undefined ? String(test.result.plasticLimit) : "-",
+            ]);
 
           return rows.length > 0
             ? {
                 title: `${record.title} - ${test.title} (Plastic Limit)`,
-                headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Moisture (%)", "PL (%)"],
+                headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Moisture (%)", "Cup Mass (g)", "Wet Mass (g)", "Dry Mass (g)", "PL (%)"],
                 rows,
               }
             : null;
@@ -747,13 +772,16 @@ const buildTablesForExport = (records: ComputedRecord[]) => {
             trial.initialVolume,
             trial.finalVolume,
             trial.moisture,
+            trial.initialMass || "-",
+            trial.finalMass || "-",
+            trial.dryMass || "-",
             test.result.shrinkageLimit !== undefined ? String(test.result.shrinkageLimit) : "-",
           ]);
 
         return rows.length > 0
           ? {
               title: `${record.title} - ${test.title} (Shrinkage Limit)`,
-              headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Initial Volume", "Final Volume", "Moisture (%)", "SL (%)"],
+              headers: ["Record", "Identifier", "Note", "Test", "Type", "Trial", "Initial Volume", "Final Volume", "Moisture (%)", "Initial Mass (g)", "Final Mass (g)", "Dry Mass (g)", "SL (%)"],
               rows,
             }
           : null;

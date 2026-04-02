@@ -3,6 +3,9 @@ interface CSVData {
   projectName?: string;
   clientName?: string;
   date?: string;
+  labOrganization?: string;
+  dateReported?: string;
+  checkedBy?: string;
   fields?: { label: string; value: string }[];
   tables?: {
     title?: string;
@@ -38,7 +41,10 @@ export const generateTestCSV = (data: CSVData) => {
 
   if (data.projectName) lines.push(`Project,${escapeCSV(data.projectName)}`);
   if (data.clientName) lines.push(`Client,${escapeCSV(data.clientName)}`);
+  if (data.labOrganization) lines.push(`Lab,${escapeCSV(data.labOrganization)}`);
   lines.push(`Date,${escapeCSV(data.date || new Date().toISOString().split("T")[0])}`);
+  if (data.dateReported) lines.push(`Date Reported,${escapeCSV(data.dateReported)}`);
+  if (data.checkedBy) lines.push(`Checked By,${escapeCSV(data.checkedBy)}`);
   lines.push("");
 
   if (data.fields && data.fields.length > 0) {

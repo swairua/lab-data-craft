@@ -6,6 +6,9 @@ interface PDFData {
   projectName?: string;
   clientName?: string;
   date?: string;
+  labOrganization?: string;
+  dateReported?: string;
+  checkedBy?: string;
   fields?: { label: string; value: string }[];
   tables?: {
     title?: string;
@@ -42,8 +45,21 @@ export const generateTestPDF = (data: PDFData) => {
     doc.text(`Client: ${data.clientName}`, 14, y);
     y += 5;
   }
+  if (data.labOrganization) {
+    doc.text(`Lab: ${data.labOrganization}`, 14, y);
+    y += 5;
+  }
   doc.text(`Date: ${data.date || new Date().toISOString().split("T")[0]}`, 14, y);
-  y += 10;
+  y += 5;
+  if (data.dateReported) {
+    doc.text(`Date Reported: ${data.dateReported}`, 14, y);
+    y += 5;
+  }
+  if (data.checkedBy) {
+    doc.text(`Checked By: ${data.checkedBy}`, 14, y);
+    y += 5;
+  }
+  y += 5;
 
   if (data.fields && data.fields.length > 0) {
     doc.setFont("helvetica", "bold");
