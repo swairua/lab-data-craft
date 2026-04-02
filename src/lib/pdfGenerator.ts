@@ -1,4 +1,4 @@
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 
 interface PDFData {
@@ -8,6 +8,7 @@ interface PDFData {
   date?: string;
   fields?: { label: string; value: string }[];
   tables?: {
+    title?: string;
     headers: string[];
     rows: string[][];
   }[];
@@ -18,18 +19,15 @@ export const generateTestPDF = (data: PDFData) => {
   const pageWidth = doc.internal.pageSize.getWidth();
   let y = 20;
 
-  // Header
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
   doc.text("Engineering Material Testing", pageWidth / 2, y, { align: "center" });
   y += 10;
 
   doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
   doc.text(data.title, pageWidth / 2, y, { align: "center" });
   y += 10;
 
-  // Project info
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setDrawColor(200);
@@ -47,7 +45,6 @@ export const generateTestPDF = (data: PDFData) => {
   doc.text(`Date: ${data.date || new Date().toISOString().split("T")[0]}`, 14, y);
   y += 10;
 
-  // Fields (key-value pairs)
   if (data.fields && data.fields.length > 0) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
@@ -56,15 +53,21 @@ export const generateTestPDF = (data: PDFData) => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     for (const field of data.fields) {
-      doc.text(`${field.label}: ${field.value || "—"}`, 14, y);
+      doc.text(`${field.label}: ${field.value || "-"}`, 14, y);
       y += 5;
     }
     y += 5;
   }
 
-  // Tables
   if (data.tables) {
     for (const table of data.tables) {
+      if (table.title) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text(table.title, 14, y);
+        y += 6;
+      }
+
       (doc as any).autoTable({
         startY: y,
         head: [table.headers],
@@ -80,22 +83,17 @@ export const generateTestPDF = (data: PDFData) => {
         margin: { left: 14, right: 14 },
         styles: { cellPadding: 3 },
       });
+
       y = (doc as any).lastAutoTable.finalY + 10;
     }
   }
 
-  // Footer
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text(
-      `Page ${i} of ${pageCount}`,
-      pageWidth / 2,
-      doc.internal.pageSize.getHeight() - 10,
-      { align: "center" }
-    );
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
   }
 
   doc.save(`${data.title.replace(/\s+/g, "_")}_Report.pdf`);
