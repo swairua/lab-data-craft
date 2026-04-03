@@ -4,8 +4,8 @@
 
 Before running tests, ensure:
 
-- [ ] Database migration has been applied (`backend/migration.sql`)
-- [ ] Environment variables are configured (`.env` file created)
+- [ ] Database migration has been applied
+- [ ] Backend API is deployed at the root `/api.php`
 - [ ] Backend PHP server is running
 - [ ] Frontend dev server is running
 - [ ] No TypeScript errors in console
@@ -142,7 +142,7 @@ SELECT COUNT(*) FROM sessions WHERE user_id = 1;
 1. With logged-in user, create some Atterberg data (Test 5)
 2. Wait 5 seconds (auto-sync debounce)
 3. Open browser DevTools → Network tab
-4. Look for POST requests to `/backend/api.php`
+4. Look for POST requests to `/api.php`
 5. Check the backend logs
 
 **Expected Result**:
@@ -282,7 +282,7 @@ SELECT * FROM test_results WHERE user_id = 1 AND user_id != 1;
 ### Register New User via cURL
 
 ```bash
-curl -X POST http://localhost:8000/backend/api.php?action=register \
+curl -X POST http://localhost:8000/api.php?action=register \
   -H "Content-Type: application/json" \
   -d '{
     "email":"testuser@example.com",
@@ -294,7 +294,7 @@ curl -X POST http://localhost:8000/backend/api.php?action=register \
 ### Login via cURL
 
 ```bash
-curl -X POST http://localhost:8000/backend/api.php?action=login \
+curl -X POST http://localhost:8000/api.php?action=login \
   -H "Content-Type: application/json" \
   -c cookies.txt \
   -d '{
@@ -306,14 +306,14 @@ curl -X POST http://localhost:8000/backend/api.php?action=login \
 ### Get Current User
 
 ```bash
-curl http://localhost:8000/backend/api.php?action=me \
+curl http://localhost:8000/api.php?action=me \
   -b cookies.txt
 ```
 
 ### Create Project
 
 ```bash
-curl -X POST http://localhost:8000/backend/api.php?table=projects&action=create \
+curl -X POST http://localhost:8000/api.php?table=projects&action=create \
   -H "Content-Type: application/json" \
   -b cookies.txt \
   -d '{
@@ -325,7 +325,7 @@ curl -X POST http://localhost:8000/backend/api.php?table=projects&action=create 
 ### List Projects (filtered by user)
 
 ```bash
-curl http://localhost:8000/backend/api.php?table=projects \
+curl http://localhost:8000/api.php?table=projects \
   -b cookies.txt
 ```
 
@@ -372,7 +372,7 @@ SELECT * FROM sessions WHERE expires_at < NOW();
 
 ### Issue: "Unauthorized" error on every request
 **Solution**:
-1. Verify user is logged in: `GET /action=me`
+1. Verify user is logged in: `GET /api.php?action=me`
 2. Check session cookie is being sent:
    - DevTools → Network → Request Headers → Cookie
 3. Verify session exists in DB and hasn't expired

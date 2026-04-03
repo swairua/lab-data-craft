@@ -12,10 +12,10 @@ Run the SQL migration script to create the new authentication tables and add `us
 
 ```bash
 # Using MySQL CLI
-mysql -h your-db-host -u your-db-user -p lab_data_craft < backend/migration.sql
+mysql -h your-db-host -u your-db-user -p lab_data_craft < migration.sql
 
 # Or with a database management tool:
-# 1. Open backend/migration.sql
+# 1. Open the SQL migration file
 # 2. Copy the entire content
 # 3. Execute it in your MySQL client
 ```
@@ -43,7 +43,7 @@ DB_NAME=lab_data_craft
 DB_PORT=3306
 ```
 
-The backend API reads these using the `env()` function in `backend/api.php`.
+The backend API is served from the root `api.php` file and uses the database credentials configured directly in that file.
 
 ### 2. Backend API Features
 
@@ -51,24 +51,24 @@ The backend API reads these using the `env()` function in `backend/api.php`.
 
 All endpoints use JSON for request/response bodies and support credentials.
 
-**POST /backend/api.php?action=register**
+**POST /api.php?action=register**
 ```json
 Request: { "email": "user@example.com", "password": "secure123", "name": "John Doe" }
 Response (201): { "message": "...", "user_id": 1, "user": { "id": 1, "email": "...", "name": "..." } }
 ```
 
-**POST /backend/api.php?action=login**
+**POST /api.php?action=login**
 ```json
 Request: { "email": "user@example.com", "password": "secure123" }
 Response (200): { "message": "...", "user_id": 1, "user": { "id": 1, "email": "...", "name": "..." } }
 ```
 
-**POST /backend/api.php?action=logout**
+**POST /api.php?action=logout**
 ```json
 Response (200): { "message": "Logged out successfully" }
 ```
 
-**GET /backend/api.php?action=me**
+**GET /api.php?action=me**
 ```json
 Response (200): { "user": { "id": 1, "email": "...", "name": "..." }, "authenticated": true }
 Response (401): { "user": null, "authenticated": false }
@@ -78,29 +78,29 @@ Response (401): { "user": null, "authenticated": false }
 
 All CRUD operations now require authentication. Add your data to the request body:
 
-**POST /backend/api.php?table=projects&action=create**
+**POST /api.php?table=projects&action=create**
 ```json
 Request: { "name": "Project A", "client_name": "Client X" }
 Response: { "message": "Record created", "id": 1, "data": { "id": 1, ... } }
 ```
 
-**GET /backend/api.php?table=projects&action=list**
+**GET /api.php?table=projects&action=list**
 ```json
 Response: { "table": "projects", "data": [...], "limit": 100, "offset": 0 }
 ```
 
-**GET /backend/api.php?table=projects&id=1**
+**GET /api.php?table=projects&id=1**
 ```json
 Response: { "table": "projects", "data": { "id": 1, ... } }
 ```
 
-**PATCH /backend/api.php?table=projects&id=1&action=update**
+**PATCH /api.php?table=projects&id=1&action=update**
 ```json
 Request: { "name": "Updated Name" }
 Response: { "message": "Record updated", "data": { "id": 1, ... } }
 ```
 
-**DELETE /backend/api.php?table=projects&id=1**
+**DELETE /api.php?table=projects&id=1**
 ```json
 Response: { "message": "Record deleted", "deleted": true }
 ```
@@ -129,7 +129,7 @@ Response: { "message": "Record deleted", "deleted": true }
 Create a `.env` file (or copy from `.env.example`):
 
 ```bash
-VITE_API_URL=http://localhost:8000/backend/api.php
+VITE_API_URL=http://localhost:8000/api.php
 ```
 
 ### 2. Integration Components
@@ -214,7 +214,7 @@ export function AtterbergComponent() {
 ### 1. Register a New User
 
 ```bash
-curl -X POST http://localhost:8000/backend/api.php?action=register \
+curl -X POST http://localhost:8000/api.php?action=register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"test123","name":"Test User"}'
 ```
@@ -222,7 +222,7 @@ curl -X POST http://localhost:8000/backend/api.php?action=register \
 ### 2. Login
 
 ```bash
-curl -X POST http://localhost:8000/backend/api.php?action=login \
+curl -X POST http://localhost:8000/api.php?action=login \
   -H "Content-Type: application/json" \
   -c cookies.txt \
   -d '{"email":"test@example.com","password":"test123"}'
@@ -231,14 +231,14 @@ curl -X POST http://localhost:8000/backend/api.php?action=login \
 ### 3. Get Current User
 
 ```bash
-curl http://localhost:8000/backend/api.php?action=me \
+curl http://localhost:8000/api.php?action=me \
   -b cookies.txt
 ```
 
 ### 4. Create a Project
 
 ```bash
-curl -X POST http://localhost:8000/backend/api.php?table=projects&action=create \
+curl -X POST http://localhost:8000/api.php?table=projects&action=create \
   -H "Content-Type: application/json" \
   -b cookies.txt \
   -d '{"name":"My Project","client_name":"ACME Inc"}'
@@ -269,7 +269,7 @@ curl -X POST http://localhost:8000/backend/api.php?table=projects&action=create 
 ## Troubleshooting
 
 ### "Unauthorized" Errors
-- Check that user is logged in: `GET /action=me`
+- Check that user is logged in: `GET /api.php?action=me`
 - Verify session is valid in `sessions` table
 - Ensure credentials include cookies: `credentials: 'include'`
 
@@ -300,10 +300,10 @@ If backend is unavailable:
 
 ## Migration Checklist
 
-- [ ] Update database with migration.sql
-- [ ] Set DB_* environment variables
-- [ ] Set VITE_API_URL environment variable
-- [ ] Test backend endpoints with curl
+- [ ] Apply the initial SQL migration
+- [ ] Configure database credentials in `api.php`
+- [ ] Verify the frontend uses the root `/api.php` endpoint
+- [ ] Test `/api.php` endpoints with curl
 - [ ] Create test user account
 - [ ] Verify multi-user isolation
 - [ ] Test offline cache functionality
