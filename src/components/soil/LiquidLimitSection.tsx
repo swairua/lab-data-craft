@@ -202,14 +202,14 @@ const LiquidLimitSection = ({ trials, result, onChangeTrials }: LiquidLimitSecti
 
       {graphData.length >= 2 && (
         <div className="rounded-lg border bg-card p-3">
-          <h4 className="mb-3 text-sm font-medium text-foreground">Moisture vs Penetration</h4>
+          <h4 className="mb-3 text-sm font-medium text-foreground">Moisture vs Penetration (Semi-log Scale)</h4>
           <div className="overflow-x-auto">
             <div className="h-[280px] min-w-[520px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={graphData} margin={{ top: 16, right: 20, left: 0, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="penetration" stroke="hsl(var(--muted-foreground))" label={{ value: "Penetration (mm)", position: "insideBottom", offset: -4 }} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" label={{ value: "Moisture (%)", angle: -90, position: "insideLeft" }} />
+                  <YAxis scale="log" stroke="hsl(var(--muted-foreground))" label={{ value: "Moisture (%) - Log Scale", angle: -90, position: "insideLeft" }} type="number" domain={[Math.min(...graphData.map(d => d.moisture)) * 0.8, Math.max(...graphData.map(d => d.moisture)) * 1.2]} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "hsl(var(--background))",
@@ -228,6 +228,7 @@ const LiquidLimitSection = ({ trials, result, onChangeTrials }: LiquidLimitSecti
                     strokeWidth={2}
                     dot={{ fill: "hsl(var(--primary))", r: 4 }}
                     activeDot={{ r: 5 }}
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>

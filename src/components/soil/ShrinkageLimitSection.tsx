@@ -53,7 +53,7 @@ const ShrinkageLimitSection = ({ trials, result, onChangeTrials }: ShrinkageLimi
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Linear Shrinkage per BS 1377. Standard mould length = 140mm.</span>
+        <span>Linear Shrinkage per BS 1377 (Standard mould length = 140mm). This measures length reduction as a percentage.</span>
         <span>Incomplete rows are ignored.</span>
       </div>
 
