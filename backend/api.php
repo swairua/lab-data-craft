@@ -2,9 +2,18 @@
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_ORIGIN'] ?? '*'));
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+header('Access-Control-Allow-Credentials: true');
+
+// Session configuration
+session_set_cookie_params([
+    'httponly' => true,
+    'samesite' => 'Lax',
+    'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? true : false,
+]);
+session_start();
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
@@ -31,6 +40,74 @@ function env(string $key, string $default = ''): string
 {
     $value = getenv($key);
     return $value === false || $value === '' ? $default : $value;
+}
+
+function hashPassword(string $password): string
+{
+    return password_hash($password, PASSWORD_DEFAULT);
+}
+
+function verifyPassword(string $password, string $hash): bool
+{
+    return password_verify($password, $hash);
+}
+
+function getCurrentUser(mysqli $conn): ?array
+{
+    if (!isset($_SESSION['user_id'])) {
+        return null;
+    }
+
+    $userId = (int) $_SESSION['user_id'];
+    $sessionId = $_SESSION['session_id'] ?? null;
+
+    if (!$sessionId) {
+        return null;
+    }
+
+    // Validate session exists and hasn't expired
+    $sql = "SELECT s.*, u.id, u.email, u.name FROM `sessions` s
+            JOIN `users` u ON s.user_id = u.id
+            WHERE s.session_id = ? AND s.expires_at > NOW()
+            LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        return null;
+    }
+
+    $stmt->bind_param('s', $sessionId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+
+    if (!$row) {
+        session_destroy();
+        return null;
+    }
+
+    // Update session expiration (sliding expiration: 30 days)
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
+    $updateStmt = $conn->prepare("UPDATE `sessions` SET `expires_at` = ?, `updated_at` = NOW() WHERE `session_id` = ?");
+    if ($updateStmt) {
+        $updateStmt->bind_param('ss', $expiresAt, $sessionId);
+        $updateStmt->execute();
+        $updateStmt->close();
+    }
+
+    return [
+        'id' => (int) $row['id'],
+        'email' => $row['email'],
+        'name' => $row['name'],
+    ];
+}
+
+function requireAuth(mysqli $conn): ?array
+{
+    $user = getCurrentUser($conn);
+    if (!$user) {
+        respond(['error' => 'Unauthorized'], 401);
+    }
+    return $user;
 }
 
 function db(): mysqli
@@ -155,11 +232,149 @@ function filteredPayload(array $input): array
 try {
     $conn = db();
     $body = requestBody();
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    $action = strtolower((string) ($_GET['action'] ?? $body['action'] ?? ''));
+
+    // ============= AUTHENTICATION ENDPOINTS =============
+
+    if ($action === 'register') {
+        $email = trim((string) ($body['email'] ?? ''));
+        $password = (string) ($body['password'] ?? '');
+        $name = trim((string) ($body['name'] ?? ''));
+
+        if (!$email || !$password || !$name) {
+            respond(['error' => 'Missing required fields: email, password, name'], 400);
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            respond(['error' => 'Invalid email format'], 400);
+        }
+
+        // Check if user already exists
+        $checkStmt = $conn->prepare("SELECT id FROM `users` WHERE email = ? LIMIT 1");
+        $checkStmt->bind_param('s', $email);
+        $checkStmt->execute();
+        if ($checkStmt->get_result()->fetch_assoc()) {
+            respond(['error' => 'Email already registered'], 409);
+        }
+        $checkStmt->close();
+
+        // Hash password and create user
+        $hashedPassword = hashPassword($password);
+        $insertStmt = $conn->prepare("INSERT INTO `users` (email, password, name) VALUES (?, ?, ?)");
+        $insertStmt->bind_param('sss', $email, $hashedPassword, $name);
+
+        if (!$insertStmt->execute()) {
+            respond(['error' => 'Failed to create user'], 500);
+        }
+
+        $userId = $conn->insert_id;
+        $insertStmt->close();
+
+        // Create session
+        $sessionId = bin2hex(random_bytes(32));
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
+        $userAgent = substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+        $sessionStmt = $conn->prepare("INSERT INTO `sessions` (session_id, user_id, user_agent, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)");
+        $sessionStmt->bind_param('sisss', $sessionId, $userId, $userAgent, $ipAddress, $expiresAt);
+        $sessionStmt->execute();
+        $sessionStmt->close();
+
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['session_id'] = $sessionId;
+        setcookie('PHPSESSID', $sessionId, strtotime($expiresAt), '/', '', true, true);
+
+        respond([
+            'message' => 'User registered and logged in',
+            'user_id' => $userId,
+            'user' => [
+                'id' => $userId,
+                'email' => $email,
+                'name' => $name,
+            ],
+        ], 201);
+    }
+
+    if ($action === 'login') {
+        $email = trim((string) ($body['email'] ?? ''));
+        $password = (string) ($body['password'] ?? '');
+
+        if (!$email || !$password) {
+            respond(['error' => 'Missing email or password'], 400);
+        }
+
+        // Fetch user by email
+        $userStmt = $conn->prepare("SELECT id, password, email, name FROM `users` WHERE email = ? LIMIT 1");
+        $userStmt->bind_param('s', $email);
+        $userStmt->execute();
+        $userRow = $userStmt->get_result()->fetch_assoc();
+        $userStmt->close();
+
+        if (!$userRow || !verifyPassword($password, (string) $userRow['password'])) {
+            respond(['error' => 'Invalid email or password'], 401);
+        }
+
+        // Create session
+        $sessionId = bin2hex(random_bytes(32));
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
+        $userAgent = substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $userId = (int) $userRow['id'];
+
+        $sessionStmt = $conn->prepare("INSERT INTO `sessions` (session_id, user_id, user_agent, ip_address, expires_at) VALUES (?, ?, ?, ?, ?)");
+        $sessionStmt->bind_param('sisss', $sessionId, $userId, $userAgent, $ipAddress, $expiresAt);
+        $sessionStmt->execute();
+        $sessionStmt->close();
+
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['session_id'] = $sessionId;
+        setcookie('PHPSESSID', $sessionId, strtotime($expiresAt), '/', '', true, true);
+
+        respond([
+            'message' => 'Logged in successfully',
+            'user_id' => $userId,
+            'user' => [
+                'id' => $userId,
+                'email' => $userRow['email'],
+                'name' => $userRow['name'],
+            ],
+        ]);
+    }
+
+    if ($action === 'logout') {
+        if (isset($_SESSION['session_id'])) {
+            $sessionId = $_SESSION['session_id'];
+            $deleteStmt = $conn->prepare("DELETE FROM `sessions` WHERE session_id = ?");
+            $deleteStmt->bind_param('s', $sessionId);
+            $deleteStmt->execute();
+            $deleteStmt->close();
+        }
+
+        session_destroy();
+        setcookie('PHPSESSID', '', time() - 3600, '/');
+
+        respond(['message' => 'Logged out successfully']);
+    }
+
+    if ($action === 'me') {
+        $user = getCurrentUser($conn);
+        if (!$user) {
+            respond(['user' => null, 'authenticated' => false], 401);
+        }
+
+        respond([
+            'user' => $user,
+            'authenticated' => true,
+        ]);
+    }
+
+    // ============= CRUD ENDPOINTS (require authentication) =============
+
     $table = tableName($body);
     $schema = columnSchema($conn, $table);
     $primaryKey = $schema['primaryKey'] ?? 'id';
-    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-    $action = strtolower((string) ($_GET['action'] ?? $body['action'] ?? ''));
 
     if ($action === '') {
         $action = $method === 'GET'
@@ -192,6 +407,9 @@ try {
     }
 
     if ($action === 'list') {
+        $user = requireAuth($conn);
+        $userId = (int) $_SESSION['user_id'];
+
         $limit = isset($_GET['limit']) ? max(1, (int) $_GET['limit']) : 100;
         $offset = isset($_GET['offset']) ? max(0, (int) $_GET['offset']) : 0;
         $orderBy = (string) ($_GET['orderBy'] ?? $primaryKey);
@@ -204,7 +422,13 @@ try {
             $direction = 'DESC';
         }
 
-        $sql = "SELECT * FROM `$table` ORDER BY `$orderBy` $direction LIMIT ? OFFSET ?";
+        // Filter by user_id if the table has it
+        $whereClause = '';
+        if (isset($schema['columns']['user_id'])) {
+            $whereClause = "WHERE `user_id` = $userId";
+        }
+
+        $sql = "SELECT * FROM `$table` $whereClause ORDER BY `$orderBy` $direction LIMIT ? OFFSET ?";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param('ii', $limit, $offset);
         $stmt->execute();
@@ -224,12 +448,21 @@ try {
     }
 
     if ($action === 'read') {
+        $user = requireAuth($conn);
+        $userId = (int) $_SESSION['user_id'];
+
         $id = $_GET['id'] ?? $body['id'] ?? null;
         if ($id === null || $id === '') {
             respond(['error' => 'Missing id'], 400);
         }
 
-        $sql = "SELECT * FROM `$table` WHERE `$primaryKey` = ? LIMIT 1";
+        // Check ownership if table has user_id
+        $whereClause = "`$primaryKey` = ?";
+        if (isset($schema['columns']['user_id'])) {
+            $whereClause .= " AND `user_id` = $userId";
+        }
+
+        $sql = "SELECT * FROM `$table` WHERE $whereClause LIMIT 1";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param('s', $id);
         $stmt->execute();
@@ -243,7 +476,16 @@ try {
     }
 
     if ($action === 'create') {
+        $user = requireAuth($conn);
+        $userId = (int) $_SESSION['user_id'];
+
         $payload = filteredPayload($body);
+
+        // Automatically add user_id if table has it
+        if (isset($schema['columns']['user_id'])) {
+            $payload['user_id'] = $userId;
+        }
+
         $columns = [];
         $placeholders = [];
         $values = [];
@@ -285,12 +527,30 @@ try {
     }
 
     if ($action === 'update') {
+        $user = requireAuth($conn);
+        $userId = (int) $_SESSION['user_id'];
+
         $id = $_GET['id'] ?? $body['id'] ?? null;
         if ($id === null || $id === '') {
             respond(['error' => 'Missing id'], 400);
         }
 
+        // Check ownership if table has user_id
+        if (isset($schema['columns']['user_id'])) {
+            $checkStmt = $conn->prepare("SELECT id FROM `$table` WHERE `$primaryKey` = ? AND `user_id` = ? LIMIT 1");
+            $checkStmt->bind_param('si', $id, $userId);
+            $checkStmt->execute();
+            if (!$checkStmt->get_result()->fetch_assoc()) {
+                respond(['error' => 'Record not found or forbidden'], 404);
+            }
+            $checkStmt->close();
+        }
+
         $payload = filteredPayload($body);
+
+        // Prevent user_id from being updated
+        unset($payload['user_id']);
+
         $sets = [];
         $values = [];
 
@@ -329,12 +589,21 @@ try {
     }
 
     if ($action === 'delete') {
+        $user = requireAuth($conn);
+        $userId = (int) $_SESSION['user_id'];
+
         $id = $_GET['id'] ?? $body['id'] ?? null;
         if ($id === null || $id === '') {
             respond(['error' => 'Missing id'], 400);
         }
 
-        $sql = sprintf('DELETE FROM `%s` WHERE `%s` = ?', $table, $primaryKey);
+        // Check ownership if table has user_id
+        $whereClause = "`$primaryKey` = ?";
+        if (isset($schema['columns']['user_id'])) {
+            $whereClause .= " AND `user_id` = $userId";
+        }
+
+        $sql = sprintf('DELETE FROM `%s` WHERE %s', $table, $whereClause);
         $stmt = $conn->prepare($sql);
         $stmt->bind_param('s', $id);
         $stmt->execute();

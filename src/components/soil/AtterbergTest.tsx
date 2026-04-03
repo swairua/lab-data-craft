@@ -46,6 +46,8 @@ import {
   isShrinkageLimitTrialValid,
 } from "@/lib/atterbergCalculations";
 import { useTestReport } from "@/hooks/useTestReport";
+import { useApi } from "@/hooks/useApi";
+import { useAtterbergSync } from "@/hooks/useAtterbergSync";
 import {
   downloadJSON,
   exportAsJSON,
@@ -166,9 +168,12 @@ const updateTrialsForType = (test: AtterbergTest, trials: AtterbergTest["trials"
 
 const AtterbergTest = () => {
   const project = useProject();
+  const { api, isAuthenticated } = useApi();
+  const { loadLocalCache, saveLocalCache, getSyncStatus, saveSyncStatus, syncToBackend } = useAtterbergSync(api);
   const [projectState, setProjectState] = useState<AtterbergProjectState>({ records: [] });
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const hydratedRef = useRef(false);
+  const syncTimeoutRef = useRef<NodeJS.Timeout>();
 
   const computedRecords = useMemo<ComputedRecord[]>(() => {
     return projectState.records.map((record) => {
@@ -214,6 +219,33 @@ const AtterbergTest = () => {
     if (!hydratedRef.current) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
   }, [persistedState]);
+
+  // Auto-sync to backend when user is authenticated
+  useEffect(() => {
+    if (!isAuthenticated || !hydratedRef.current || projectState.records.length === 0) return;
+
+    // Clear existing timeout
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    // Debounce sync (5 seconds of inactivity)
+    syncTimeoutRef.current = setTimeout(() => {
+      const projectId = projectState.projectId;
+      if (projectId) {
+        syncToBackend(projectId, projectState).catch((error) => {
+          console.error("Auto-sync failed:", error);
+          toast.error("Failed to sync to server");
+        });
+      }
+    }, 5000);
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [projectState, isAuthenticated, syncToBackend]);
 
   const { totalDataPoints, aggregateResults, aggregateProjectResults, status, totalCompletedTests } = useMemo(() => {
     const totalPoints = computedRecords.reduce((sum, record) => sum + record.dataPoints, 0);
