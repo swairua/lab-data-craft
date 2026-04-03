@@ -47,6 +47,12 @@ import {
 } from "@/lib/atterbergCalculations";
 import { useTestReport } from "@/hooks/useTestReport";
 import {
+  createRecord,
+  deleteRecord,
+  listRecords,
+  updateRecord,
+} from "@/lib/api";
+import {
   downloadJSON,
   exportAsJSON,
   importFromJSON,
@@ -152,6 +158,155 @@ const buildPersistedState = (records: ComputedRecord[]): AtterbergProjectState =
   records: records.map(({ dataPoints, completedTests, ...record }) => record),
 });
 
+type ApiProjectRow = {
+  id: number;
+  name: string;
+  client_name: string | null;
+  project_date: string | null;
+};
+
+type ApiAtterbergResultRow = {
+  id: number;
+  project_id: number;
+  test_key: string;
+  payload_json: unknown;
+};
+
+type AtterbergProjectLookup = {
+  projectName: string;
+  clientName: string;
+  projectDate: string;
+};
+
+const normalizeLookupValue = (value: string | null | undefined) => value?.trim() ?? "";
+
+const isRecordObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+const matchesProjectLookup = (row: ApiProjectRow, lookup: AtterbergProjectLookup) =>
+  normalizeLookupValue(row.name) === lookup.projectName &&
+  normalizeLookupValue(row.client_name) === lookup.clientName &&
+  normalizeLookupValue(row.project_date) === lookup.projectDate;
+
+const extractAtterbergPayload = (value: unknown) => {
+  if (!isRecordObject(value)) return value;
+  if (isRecordObject(value.project)) return value.project;
+  return value;
+};
+
+const getAtterbergLookup = (projectName: string, clientName: string, projectDate: string): AtterbergProjectLookup => ({
+  projectName: normalizeLookupValue(projectName),
+  clientName: normalizeLookupValue(clientName),
+  projectDate: normalizeLookupValue(projectDate),
+});
+
+const hasLookupCriteria = (lookup: AtterbergProjectLookup) => lookup.projectName !== "" || lookup.clientName !== "" || lookup.projectDate !== "";
+
+const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
+  const [projectsResponse, resultsResponse] = await Promise.all([
+    listRecords<ApiProjectRow>("projects", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
+    listRecords<ApiAtterbergResultRow>("test_results", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
+  ]);
+
+  if (!hasLookupCriteria(lookup)) {
+    const latestResult = resultsResponse.data.find((row) => row.test_key === "atterberg" && row.payload_json);
+    return latestResult ? normalizeAtterbergProjectState(extractAtterbergPayload(latestResult.payload_json)) : null;
+  }
+
+  const projectRow = projectsResponse.data.find((row) => matchesProjectLookup(row, lookup));
+  if (!projectRow) return null;
+
+  const resultRow = resultsResponse.data.find((row) => row.test_key === "atterberg" && Number(row.project_id) === projectRow.id && row.payload_json);
+  if (!resultRow) return null;
+
+  return normalizeAtterbergProjectState(extractAtterbergPayload(resultRow.payload_json));
+};
+
+const saveAtterbergProjectToApi = async ({
+  lookup,
+  payload,
+  dataPoints,
+  status,
+  keyResults,
+}: {
+  lookup: AtterbergProjectLookup;
+  payload: AtterbergExportPayload;
+  dataPoints: number;
+  status: string;
+  keyResults: Array<{ label: string; value: string }>;
+}) => {
+  const [projectsResponse, resultsResponse] = await Promise.all([
+    listRecords<ApiProjectRow>("projects", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
+    listRecords<ApiAtterbergResultRow>("test_results", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
+  ]);
+
+  let projectRow = hasLookupCriteria(lookup)
+    ? projectsResponse.data.find((row) => matchesProjectLookup(row, lookup)) ?? null
+    : projectsResponse.data[0] ?? null;
+  const projectName = normalizeLookupValue(payload.project.title) || "Atterberg Limits Testing";
+  const clientName = normalizeLookupValue(payload.project.clientName);
+  const projectDate = normalizeLookupValue(payload.project.date);
+
+  if (!projectRow) {
+    const createdProject = await createRecord<ApiProjectRow>("projects", {
+      name: projectName,
+      client_name: clientName || null,
+      project_date: projectDate || null,
+    });
+    projectRow = createdProject.data;
+  } else {
+    const updatedProject = await updateRecord<ApiProjectRow>("projects", projectRow.id, {
+      name: projectName,
+      client_name: clientName || null,
+      project_date: projectDate || null,
+    });
+    projectRow = updatedProject.data ?? projectRow;
+  }
+
+  if (!projectRow) {
+    throw new Error("Unable to save project");
+  }
+
+  const existingResult = resultsResponse.data.find((row) => row.test_key === "atterberg" && Number(row.project_id) === projectRow.id) ?? null;
+  const resultPayload = {
+    project_id: projectRow.id,
+    test_key: "atterberg",
+    name: projectName,
+    category: "soil",
+    status,
+    data_points: dataPoints,
+    key_results_json: keyResults,
+    payload_json: payload,
+  };
+
+  if (existingResult) {
+    await updateRecord("test_results", existingResult.id, resultPayload);
+  } else {
+    await createRecord("test_results", resultPayload);
+  }
+};
+
+const clearAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
+  const [projectsResponse, resultsResponse] = await Promise.all([
+    listRecords<ApiProjectRow>("projects", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
+    listRecords<ApiAtterbergResultRow>("test_results", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
+  ]);
+
+  let resultRow = null as ApiAtterbergResultRow | null;
+
+  if (hasLookupCriteria(lookup)) {
+    const projectRow = projectsResponse.data.find((row) => matchesProjectLookup(row, lookup)) ?? null;
+    if (projectRow) {
+      resultRow = resultsResponse.data.find((row) => row.test_key === "atterberg" && Number(row.project_id) === projectRow.id) ?? null;
+    }
+  } else {
+    resultRow = resultsResponse.data.find((row) => row.test_key === "atterberg" && row.payload_json) ?? null;
+  }
+
+  if (resultRow) {
+    await deleteRecord("test_results", resultRow.id);
+  }
+};
+
 const updateTrialsForType = (test: AtterbergTest, trials: AtterbergTest["trials"]): AtterbergTest => {
   switch (test.type) {
     case "liquidLimit":
@@ -168,6 +323,7 @@ const AtterbergTest = () => {
   const [projectState, setProjectState] = useState<AtterbergProjectState>({ records: [] });
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const hydratedRef = useRef(false);
+  const loadAttemptedRef = useRef(false);
   const skipNextPersistRef = useRef(false);
 
   const computedRecords = useMemo<ComputedRecord[]>(() => {
@@ -192,32 +348,56 @@ const AtterbergTest = () => {
   }, [projectState.records]);
 
   const persistedState = useMemo(() => buildPersistedState(computedRecords), [computedRecords]);
+  const effectiveProjectLookup = useMemo(
+    () => getAtterbergLookup(project.projectName || projectState.projectName || "Atterberg Limits Testing", project.clientName || projectState.clientName, project.date),
+    [project.clientName, project.date, project.projectName, projectState.clientName, projectState.projectName],
+  );
 
   useEffect(() => {
-    if (hydratedRef.current) return;
-    hydratedRef.current = true;
+    if (loadAttemptedRef.current) return;
+    loadAttemptedRef.current = true;
 
-    const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("enhancedAtterbergTests");
-    if (!saved) return;
+    let cancelled = false;
 
-    try {
-      const parsed = normalizeAtterbergProjectState(JSON.parse(saved));
-      if (parsed) {
-        setProjectState(parsed);
+    const restoreProject = async () => {
+      try {
+        const remoteState = await loadAtterbergProjectFromApi(effectiveProjectLookup);
+        if (cancelled) return;
+
+        if (remoteState) {
+          skipNextPersistRef.current = true;
+          setProjectState(remoteState);
+          hydratedRef.current = true;
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to restore Atterberg project from API:", error);
       }
-    } catch (error) {
-      console.error("Failed to restore Atterberg project:", error);
-    }
-  }, []);
 
-  useEffect(() => {
-    if (!hydratedRef.current) return;
-    if (skipNextPersistRef.current) {
-      skipNextPersistRef.current = false;
-      return;
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
-  }, [persistedState]);
+      if (cancelled) return;
+
+      const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("enhancedAtterbergTests");
+      if (saved) {
+        try {
+          const parsed = normalizeAtterbergProjectState(JSON.parse(saved));
+          if (parsed) {
+            skipNextPersistRef.current = true;
+            setProjectState(parsed);
+          }
+        } catch (error) {
+          console.error("Failed to restore Atterberg project:", error);
+        }
+      }
+
+      hydratedRef.current = true;
+    };
+
+    void restoreProject();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveProjectLookup]);
 
   const { totalDataPoints, aggregateResults, aggregateProjectResults, status, totalCompletedTests } = useMemo(() => {
     const totalPoints = computedRecords.reduce((sum, record) => sum + record.dataPoints, 0);
@@ -235,6 +415,24 @@ const AtterbergTest = () => {
   }, [computedRecords]);
 
   useTestReport("atterberg", totalDataPoints, aggregateResults, status);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+
+    void saveAtterbergProjectToApi({
+      lookup: effectiveProjectLookup,
+      payload: buildExportPayload(),
+      dataPoints: totalDataPoints,
+      status,
+      keyResults: aggregateResults,
+    }).catch((error) => {
+      console.error("Failed to save Atterberg project to API:", error);
+    });
+  }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
 
   const updateProjectMetadata = useCallback((updater: (state: AtterbergProjectState) => Partial<AtterbergProjectState>) => {
     setProjectState((prev) => ({
@@ -328,18 +526,30 @@ const AtterbergTest = () => {
     [updateTest],
   );
 
-  const handleSave = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
-  }, [persistedState]);
+  const handleSave = useCallback(async () => {
+    await saveAtterbergProjectToApi({
+      lookup: effectiveProjectLookup,
+      payload: buildExportPayload(),
+      dataPoints: totalDataPoints,
+      status,
+      keyResults: aggregateResults,
+    });
+  }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
 
-  const handleClearAll = useCallback(() => {
-    skipNextPersistRef.current = true;
-    setProjectState({ records: [] });
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem("enhancedAtterbergTests");
-    setIsClearDialogOpen(false);
-    toast.success("Atterberg project cleared");
-  }, []);
+  const handleClearAll = useCallback(async () => {
+    try {
+      skipNextPersistRef.current = true;
+      await clearAtterbergProjectFromApi(effectiveProjectLookup);
+      setProjectState({ records: [] });
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("enhancedAtterbergTests");
+      setIsClearDialogOpen(false);
+      toast.success("Atterberg project cleared");
+    } catch (error) {
+      console.error("Failed to clear Atterberg project:", error);
+      toast.error("Failed to clear Atterberg project");
+    }
+  }, [effectiveProjectLookup]);
 
   const handleClearRequest = useCallback(() => {
     setIsClearDialogOpen(true);
