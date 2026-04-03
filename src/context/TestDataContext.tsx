@@ -121,6 +121,10 @@ export interface AtterbergProjectMetadata {
 
 export interface AtterbergProjectState extends AtterbergProjectMetadata {
   records: AtterbergRecord[];
+  projectId?: number; // Backend project ID
+  syncStatus?: 'pending' | 'syncing' | 'synced' | 'error'; // Sync status
+  lastSyncedAt?: string; // Last sync timestamp
+  syncError?: string; // Sync error message
 }
 
 interface TestDataContextType {

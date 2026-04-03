@@ -6,14 +6,52 @@ USE `lab_data_craft`;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- Users table for authentication
+CREATE TABLE IF NOT EXISTS `users` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `email` VARCHAR(255) NOT NULL,
+  `password` VARCHAR(255) NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_users_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Sessions table for session persistence
+CREATE TABLE IF NOT EXISTS `sessions` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `session_id` VARCHAR(255) NOT NULL,
+  `user_id` INT UNSIGNED NOT NULL,
+  `user_agent` VARCHAR(500) DEFAULT NULL,
+  `ip_address` VARCHAR(50) DEFAULT NULL,
+  `expires_at` TIMESTAMP NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_sessions_session_id` (`session_id`),
+  KEY `idx_sessions_user_id` (`user_id`),
+  KEY `idx_sessions_expires_at` (`expires_at`),
+  CONSTRAINT `fk_sessions_user`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `projects` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED DEFAULT NULL,
   `name` VARCHAR(255) NOT NULL,
   `client_name` VARCHAR(255) DEFAULT NULL,
   `project_date` DATE DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_projects_user_id` (`user_id`),
+  CONSTRAINT `fk_projects_user`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `test_definitions` (
@@ -31,6 +69,7 @@ CREATE TABLE IF NOT EXISTS `test_definitions` (
 
 CREATE TABLE IF NOT EXISTS `test_results` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED DEFAULT NULL,
   `project_id` INT UNSIGNED DEFAULT NULL,
   `test_key` VARCHAR(50) NOT NULL,
   `name` VARCHAR(255) NOT NULL,
@@ -42,9 +81,14 @@ CREATE TABLE IF NOT EXISTS `test_results` (
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `idx_test_results_user_id` (`user_id`),
   KEY `idx_test_results_project_id` (`project_id`),
   KEY `idx_test_results_test_key` (`test_key`),
   KEY `idx_test_results_category` (`category`),
+  CONSTRAINT `fk_test_results_user`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
   CONSTRAINT `fk_test_results_project`
     FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`)
     ON DELETE SET NULL
