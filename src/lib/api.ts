@@ -2,6 +2,27 @@ const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
 export const API_BASE_URL = configuredApiBaseUrl || "https://lab.wayrus.co.ke/api.php";
 
+export interface ApiUser {
+  id: number;
+  email: string;
+  name: string;
+}
+
+interface LoginResponse {
+  message: string;
+  user_id: number;
+  user: ApiUser;
+}
+
+interface CurrentUserResponse {
+  user: ApiUser | null;
+  authenticated: boolean;
+}
+
+interface LogoutResponse {
+  message: string;
+}
+
 export const buildApiUrl = (params?: Record<string, string | number | boolean | null | undefined>) => {
   const url = new URL(API_BASE_URL);
 
@@ -19,13 +40,20 @@ export const apiRequest = async <T>(
   init?: RequestInit,
   params?: Record<string, string | number | boolean | null | undefined>,
 ): Promise<T> => {
+  const headers = new Headers(init?.headers);
+
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+
+  if (init?.body !== undefined && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const response = await fetch(buildApiUrl(params), {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
     ...init,
+    headers,
   });
 
   const data = await response.json().catch(() => null);
@@ -36,3 +64,19 @@ export const apiRequest = async <T>(
 
   return data as T;
 };
+
+export const loginUser = (email: string, password: string) =>
+  apiRequest<LoginResponse>(
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    },
+    { action: "login" },
+  );
+
+export const fetchCurrentUser = async () => {
+  const response = await apiRequest<CurrentUserResponse>(undefined, { action: "me" });
+  return response.user;
+};
+
+export const logoutUser = () => apiRequest<LogoutResponse>({ method: "POST" }, { action: "logout" });
