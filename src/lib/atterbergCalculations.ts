@@ -75,12 +75,17 @@ export const isShrinkageLimitTrialStarted = (trial: ShrinkageLimitTrial) =>
 
 export const isLiquidLimitTrialValid = (trial: LiquidLimitTrial): boolean => {
   const moisture = getTrialMoisture(trial);
-  return isFiniteNumber(trial.penetration) && isFiniteNumber(moisture);
+  return (
+    isFiniteNumber(trial.penetration) &&
+    Number(trial.penetration) > 0 &&
+    isFiniteNumber(moisture) &&
+    Number(moisture) >= 0
+  );
 };
 
 export const isPlasticLimitTrialValid = (trial: PlasticLimitTrial): boolean => {
   const moisture = getTrialMoisture(trial);
-  return isFiniteNumber(moisture);
+  return isFiniteNumber(moisture) && Number(moisture) >= 0;
 };
 
 export const isShrinkageLimitTrialValid = (trial: ShrinkageLimitTrial): boolean => {
@@ -188,6 +193,7 @@ export const calculateShrinkageLimit = (trials: ShrinkageLimitTrial[]): number |
  */
 export const calculatePlasticityIndex = (liquidLimit: number | null, plasticLimit: number | null): number | null => {
   if (liquidLimit === null || plasticLimit === null) return null;
+  if (liquidLimit < 0 || plasticLimit < 0 || plasticLimit > liquidLimit) return null;
   return round(liquidLimit - plasticLimit);
 };
 

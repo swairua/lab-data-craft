@@ -5,12 +5,14 @@ import AtterbergTestComponent from "@/components/soil/AtterbergTest";
 import AtterbergTestCard from "@/components/soil/AtterbergTestCard";
 import type { AtterbergTest } from "@/context/TestDataContext";
 
-const toastError = vi.fn();
-const toastSuccess = vi.fn();
-const generateTestPDF = vi.fn();
-const generateTestCSV = vi.fn();
-const useProject = vi.fn();
-const useTestReport = vi.fn();
+const { toastError, toastSuccess, generateTestPDF, generateTestCSV, useProject, useTestReport } = vi.hoisted(() => ({
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
+  generateTestPDF: vi.fn(),
+  generateTestCSV: vi.fn(),
+  useProject: vi.fn(),
+  useTestReport: vi.fn(),
+}));
 
 vi.mock("sonner", () => ({
   toast: {
