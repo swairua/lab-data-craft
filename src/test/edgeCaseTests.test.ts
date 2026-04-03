@@ -41,10 +41,10 @@ describe("Edge Case Tests - Non-Plastic Soils", () => {
           title: "LL Test",
           isExpanded: false,
           trials: [
-            { id: "t1", trialNo: "1", penetration: "20", moisture: "20" },
+            { id: "t1", trialNo: "1", penetration: "20", moisture: "19.4" },
             { id: "t2", trialNo: "2", penetration: "25", moisture: "19" },
           ],
-          result: { liquidLimit: 19.5 },
+          result: { liquidLimit: 19.4 },
         },
         {
           id: "test2",
@@ -58,7 +58,7 @@ describe("Edge Case Tests - Non-Plastic Soils", () => {
           result: { plasticLimit: 19.1 },
         },
       ],
-      results: { liquidLimit: 19.5, plasticLimit: 19.1, plasticityIndex: 0.4 },
+      results: { liquidLimit: 19.4, plasticLimit: 19.1, plasticityIndex: 0.3 },
     };
 
     const results = calculateRecordResults(record);
@@ -440,7 +440,23 @@ function classifyFineGrainedLocal(ll: number | undefined, pi: number | undefined
   if (pi === undefined || pi === 0 || pi < 0.5) {
     return { uscsSymbol: "ML", classification: "Non-plastic silt" };
   }
-  return { uscsSymbol: "CL/CH", classification: "Plastic clay" };
+
+  if (ll === undefined) {
+    return { uscsSymbol: "CH/CL", classification: "Plastic clay" };
+  }
+
+  const aLineValue = 0.73 * (ll - 20);
+  const aboveLine = pi > aLineValue;
+
+  if (ll < 50) {
+    return aboveLine
+      ? { uscsSymbol: "CL", classification: "Lean clay" }
+      : { uscsSymbol: "ML", classification: "Silt" };
+  }
+
+  return aboveLine
+    ? { uscsSymbol: "CH", classification: "Fat clay" }
+    : { uscsSymbol: "MH", classification: "Elastic silt" };
 }
 
 describe("Edge Case Tests - Classification Edge Cases", () => {
@@ -455,12 +471,12 @@ describe("Edge Case Tests - Classification Edge Cases", () => {
   });
 
   it("classifies low LL, low PI soil", () => {
-    const result = classifyFineGrainedLocal(20, 3);
+    const result = classifyFineGrainedLocal(30, 3);
     expect(result.uscsSymbol).toBe("ML");
   });
 
   it("classifies high LL, high PI soil", () => {
-    const result = classifyFineGrainedLocal(60, 25);
-    expect(result.uscsSymbol).toBe("CL/CH");
+    const result = classifyFineGrainedLocal(60, 35);
+    expect(result.uscsSymbol).toBe("CH");
   });
 });
