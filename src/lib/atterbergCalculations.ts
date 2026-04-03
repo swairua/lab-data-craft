@@ -371,11 +371,38 @@ export const getTestValidationMessages = (test: AtterbergTest): { errors: string
     if (validTrialsCount > 0 && Math.abs(maxPen - minPen) < 3) {
       warnings.push("Penetration range is narrow - recommend wider range for better interpolation");
     }
+
+    // Check for outliers in moisture content
+    if (validTrialsCount >= 2) {
+      const moistureValues = validTrials.map((t) => t.moisture);
+      const mean = averageNumbers(moistureValues);
+      if (mean !== null) {
+        const variance = moistureValues.reduce((sum, m) => sum + Math.pow(m - mean, 2), 0) / moistureValues.length;
+        const stdDev = Math.sqrt(variance);
+        const outliers = validTrials.filter((t) => Math.abs(t.moisture - mean) > 2 * stdDev);
+        if (outliers.length > 0) {
+          warnings.push(`${outliers.length} trial(s) may be outliers - moisture values differ significantly from mean`);
+        }
+      }
+    }
+
+    // Check fit quality
+    const fitQuality = getLiquidLimitFitQuality(test.trials);
+    if (fitQuality && fitQuality.rSquared < 0.95) {
+      warnings.push(`R² = ${fitQuality.rSquared.toFixed(3)} - data scatter is high, verify measurements`);
+    }
   }
 
   if (test.type === "plasticLimit") {
     if (validTrialsCount < 2) {
       errors.push("At least 2 trials are required to calculate Plastic Limit");
+    } else {
+      // Check coefficient of variation for plastic limit
+      const validValues = getValidPlasticLimitTrials(test.trials);
+      const cv = calculateCoefficientOfVariation(validValues);
+      if (cv !== null && cv > 5) {
+        warnings.push(`High variation in moisture (CV=${cv.toFixed(1)}%) - check trial consistency`);
+      }
     }
   }
 
@@ -383,6 +410,25 @@ export const getTestValidationMessages = (test: AtterbergTest): { errors: string
     const validTrials = getValidShrinkageLimitTrials(test.trials);
     if (validTrialsCount > 0 && validTrials.some((t) => t.initialLength <= 0 || t.finalLength <= 0)) {
       errors.push("Length values must be positive numbers");
+    }
+
+    // Check for unrealistic final lengths
+    if (validTrialsCount > 0) {
+      const unrealistic = validTrials.filter((t) => t.finalLength > t.initialLength);
+      if (unrealistic.length > 0) {
+        errors.push("Final length cannot exceed initial length");
+      }
+    }
+
+    // Check for excessive shrinkage
+    if (validTrialsCount > 0) {
+      const excessive = validTrials.filter((t) => {
+        const shrinkage = ((t.initialLength - t.finalLength) / t.initialLength) * 100;
+        return shrinkage > 100;
+      });
+      if (excessive.length > 0) {
+        errors.push("Shrinkage cannot exceed 100%");
+      }
     }
   }
 
@@ -434,6 +480,81 @@ export const getLiquidLimitGraphData = (trials: LiquidLimitTrial[]) =>
     moisture: trial.moisture,
     trial: trial.trialNo,
   }));
+
+/**
+ * Linear regression for curve fitting
+ * Returns slope, intercept, and R-squared value
+ */
+export const calculateLinearRegression = (
+  points: Array<{ x: number; y: number }>,
+): { slope: number; intercept: number; rSquared: number } | null => {
+  if (points.length < 2) return null;
+
+  const n = points.length;
+  const sumX = points.reduce((sum, p) => sum + p.x, 0);
+  const sumY = points.reduce((sum, p) => sum + p.y, 0);
+  const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
+  const sumX2 = points.reduce((sum, p) => sum + p.x * p.x, 0);
+
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+
+  // Calculate R-squared
+  const meanY = sumY / n;
+  const ssTotal = points.reduce((sum, p) => sum + Math.pow(p.y - meanY, 2), 0);
+  const ssResidual = points.reduce((sum, p) => sum + Math.pow(p.y - (slope * p.x + intercept), 2), 0);
+  const rSquared = 1 - ssResidual / ssTotal;
+
+  return {
+    slope: round(slope),
+    intercept: round(intercept),
+    rSquared: round(rSquared),
+  };
+};
+
+/**
+ * Predict Y value using linear regression
+ */
+export const predictWithLinearRegression = (
+  x: number,
+  slope: number,
+  intercept: number,
+): number => {
+  return round(slope * x + intercept);
+};
+
+/**
+ * Calculate coefficient of variation for moisture values
+ * Used to assess consistency of plastic limit trials
+ */
+export const calculateCoefficientOfVariation = (values: number[]): number | null => {
+  if (values.length === 0) return null;
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  if (mean === 0) return null;
+  const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+  const stdDev = Math.sqrt(variance);
+  return round((stdDev / mean) * 100);
+};
+
+/**
+ * Fit line through liquid limit trials and get R-squared
+ * Helps assess quality of cone penetration test data
+ */
+export const getLiquidLimitFitQuality = (trials: LiquidLimitTrial[]): { rSquared: number; slope: number; intercept: number } | null => {
+  const validTrials = getValidLiquidLimitTrials(trials);
+  if (validTrials.length < 2) return null;
+
+  const points = validTrials.map((t) => ({ x: t.penetration, y: t.moisture }));
+  const regression = calculateLinearRegression(points);
+
+  return regression
+    ? {
+        rSquared: regression.rSquared,
+        slope: regression.slope,
+        intercept: regression.intercept,
+      }
+    : null;
+};
 
 // Legacy aliases for backwards compatibility
 export const isLinearShrinkageTrialValid = isShrinkageLimitTrialValid;

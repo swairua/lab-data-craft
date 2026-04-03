@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import TestSection from "@/components/TestSection";
 import AtterbergTestCard from "./AtterbergTestCard";
+import PlasticityChart from "./PlasticityChart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -72,7 +73,7 @@ const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toSt
 const testTypeLabels: Record<AtterbergTestType, string> = {
   liquidLimit: "Liquid Limit",
   plasticLimit: "Plastic Limit",
-  shrinkageLimit: "Shrinkage Limit",
+  shrinkageLimit: "Linear Shrinkage",
 };
 
 const createLiquidLimitTrial = (index: number): LiquidLimitTrial => ({
@@ -980,31 +981,40 @@ const RecordCard = ({
               </div>
             )}
 
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <h4 className="text-sm font-semibold">Record Summary</h4>
-                <div className="text-xs text-muted-foreground">
-                  {record.dataPoints} valid data point{record.dataPoints === 1 ? "" : "s"} • {record.completedTests} completed test{record.completedTests === 1 ? "" : "s"}
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <h4 className="text-sm font-semibold">Record Summary</h4>
+                  <div className="text-xs text-muted-foreground">
+                    {record.dataPoints} valid data point{record.dataPoints === 1 ? "" : "s"} • {record.completedTests} completed test{record.completedTests === 1 ? "" : "s"}
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {resultCards.map((item) => (
+                    <div
+                      key={item.label}
+                      className={cn(
+                        "rounded-lg border p-3",
+                        item.tone === "blue" && "border-blue-200 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/20",
+                        item.tone === "emerald" && "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20",
+                        item.tone === "amber" && "border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20",
+                        item.tone === "violet" && "border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20",
+                      )}
+                    >
+                      <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
+                      <div className="mt-1 text-lg font-bold">{item.value !== undefined ? `${item.value}%` : "-"}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {resultCards.map((item) => (
-                  <div
-                    key={item.label}
-                    className={cn(
-                      "rounded-lg border p-3",
-                      item.tone === "blue" && "border-blue-200 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/20",
-                      item.tone === "emerald" && "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20",
-                      item.tone === "amber" && "border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20",
-                      item.tone === "violet" && "border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20",
-                    )}
-                  >
-                    <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
-                    <div className="mt-1 text-lg font-bold">{item.value !== undefined ? `${item.value}%` : "-"}</div>
-                  </div>
-                ))}
-              </div>
+              {record.results.liquidLimit !== undefined || record.results.plasticityIndex !== undefined ? (
+                <PlasticityChart
+                  liquidLimit={record.results.liquidLimit ?? null}
+                  plasticityIndex={record.results.plasticityIndex ?? null}
+                />
+              ) : null}
             </div>
           </CardContent>
         </CollapsibleContent>
