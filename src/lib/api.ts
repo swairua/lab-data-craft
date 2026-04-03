@@ -79,4 +79,39 @@ export const fetchCurrentUser = async () => {
   return response.user;
 };
 
+export interface ApiListResponse<T> {
+  table: string;
+  data: T[];
+  limit: number;
+  offset: number;
+}
+
+export interface ApiReadResponse<T> {
+  table: string;
+  data: T;
+}
+
+export interface ApiWriteResponse<T> {
+  message: string;
+  table: string;
+  id?: number;
+  data: T | null;
+  deleted?: boolean;
+}
+
+export const listRecords = async <T>(table: string, params?: Record<string, string | number | boolean | null | undefined>) =>
+  apiRequest<ApiListResponse<T>>(undefined, { action: "list", table, ...params });
+
+export const readRecord = async <T>(table: string, id: string | number) =>
+  apiRequest<ApiReadResponse<T>>(undefined, { action: "read", table, id });
+
+export const createRecord = async <T>(table: string, data: Record<string, unknown>) =>
+  apiRequest<ApiWriteResponse<T>>({ method: "POST", body: JSON.stringify({ table, data }) }, { action: "create" });
+
+export const updateRecord = async <T>(table: string, id: string | number, data: Record<string, unknown>) =>
+  apiRequest<ApiWriteResponse<T>>({ method: "PUT", body: JSON.stringify({ table, id, data }) }, { action: "update" });
+
+export const deleteRecord = async <T>(table: string, id: string | number) =>
+  apiRequest<ApiWriteResponse<T>>({ method: "DELETE", body: JSON.stringify({ table, id }) }, { action: "delete" });
+
 export const logoutUser = () => apiRequest<LogoutResponse>({ method: "POST" }, { action: "logout" });

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 interface TestSectionProps {
   title: string;
   children: ReactNode;
-  onSave?: () => void;
+  onSave?: () => void | Promise<void>;
   onClear?: () => void;
   onExportPDF?: () => boolean | void;
   onExportCSV?: () => boolean | void;
@@ -56,9 +56,15 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
               <Button
                 size="sm"
                 variant="default"
-                onClick={() => {
-                  onSave();
-                  toast.success(`${title} saved locally`);
+                onClick={async () => {
+                  try {
+                    const result = await onSave();
+                    if (result !== false) {
+                      toast.success(`${title} saved`);
+                    }
+                  } catch {
+                    toast.error(`${title} save failed`);
+                  }
                 }}
               >
                 <Save className="h-3.5 w-3.5 mr-1" /> Save
