@@ -36,12 +36,6 @@ function respond(array $payload, int $status = 200): never
     exit;
 }
 
-function env(string $key, string $default = ''): string
-{
-    $value = getenv($key);
-    return $value === false || $value === '' ? $default : $value;
-}
-
 function hashPassword(string $password): string
 {
     return password_hash($password, PASSWORD_DEFAULT);
@@ -112,11 +106,11 @@ function requireAuth(mysqli $conn): ?array
 
 function db(): mysqli
 {
-    $host = env('DB_HOST', '127.0.0.1');
-    $user = env('DB_USER', 'root');
-    $pass = env('DB_PASSWORD', '');
-    $name = env('DB_NAME', 'lab_data_craft');
-    $port = (int) env('DB_PORT', '3306');
+    $host = 'localhost';
+    $user = 'wayrusc1_labdatacraft';
+    $pass = 'Sirgeorge.12';
+    $name = 'wayrusc1_labdatacraft';
+    $port = 3306;
 
     $conn = new mysqli($host, $user, $pass, $name, $port);
     $conn->set_charset('utf8mb4');

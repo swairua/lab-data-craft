@@ -49,7 +49,7 @@ export class ApiClient {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || (import.meta.env.VITE_API_URL as string) || '/backend/api.php';
+    this.baseUrl = baseUrl || '/api.php';
   }
 
   private async request<T>(
