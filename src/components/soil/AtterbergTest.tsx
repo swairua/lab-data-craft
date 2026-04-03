@@ -168,6 +168,7 @@ const AtterbergTest = () => {
   const [projectState, setProjectState] = useState<AtterbergProjectState>({ records: [] });
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const hydratedRef = useRef(false);
+  const skipNextPersistRef = useRef(false);
 
   const computedRecords = useMemo<ComputedRecord[]>(() => {
     return projectState.records.map((record) => {
@@ -211,6 +212,10 @@ const AtterbergTest = () => {
 
   useEffect(() => {
     if (!hydratedRef.current) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
   }, [persistedState]);
 
@@ -328,6 +333,7 @@ const AtterbergTest = () => {
   }, [persistedState]);
 
   const handleClearAll = useCallback(() => {
+    skipNextPersistRef.current = true;
     setProjectState({ records: [] });
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem("enhancedAtterbergTests");
