@@ -47,10 +47,10 @@ import {
 } from "@/lib/atterbergCalculations";
 import { useTestReport } from "@/hooks/useTestReport";
 import {
-  createRecord,
-  deleteRecord,
+  createRecord as createApiRecord,
+  deleteRecord as deleteApiRecord,
   listRecords,
-  updateRecord,
+  updateRecord as updateApiRecord,
 } from "@/lib/api";
 import {
   downloadJSON,
@@ -247,14 +247,14 @@ const saveAtterbergProjectToApi = async ({
   const projectDate = normalizeLookupValue(payload.project.date);
 
   if (!projectRow) {
-    const createdProject = await createRecord<ApiProjectRow>("projects", {
+    const createdProject = await createApiRecord<ApiProjectRow>("projects", {
       name: projectName,
       client_name: clientName || null,
       project_date: projectDate || null,
     });
     projectRow = createdProject.data;
   } else {
-    const updatedProject = await updateRecord<ApiProjectRow>("projects", projectRow.id, {
+    const updatedProject = await updateApiRecord<ApiProjectRow>("projects", projectRow.id, {
       name: projectName,
       client_name: clientName || null,
       project_date: projectDate || null,
@@ -279,9 +279,9 @@ const saveAtterbergProjectToApi = async ({
   };
 
   if (existingResult) {
-    await updateRecord("test_results", existingResult.id, resultPayload);
+    await updateApiRecord("test_results", existingResult.id, resultPayload);
   } else {
-    await createRecord("test_results", resultPayload);
+    await createApiRecord("test_results", resultPayload);
   }
 };
 
@@ -303,7 +303,7 @@ const clearAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
   }
 
   if (resultRow) {
-    await deleteRecord("test_results", resultRow.id);
+    await deleteApiRecord("test_results", resultRow.id);
   }
 };
 
