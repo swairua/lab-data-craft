@@ -205,6 +205,41 @@ export const calculateModulusOfPlasticity = (plasticityIndex: number | null, pas
   return round(plasticityIndex * Number(passing425um) / 100);
 };
 
+/**
+ * Calculate A-line position: PI = 0.73(LL - 20)
+ * Used in Plasticity Chart for soil classification
+ */
+export const getALinePI = (liquidLimit: number): number => {
+  return round(0.73 * (liquidLimit - 20));
+};
+
+/**
+ * Calculate U-line position: PI = 0.9(LL - 8)
+ * Upper limit for natural soils
+ */
+export const getULinePI = (liquidLimit: number): number => {
+  return round(0.9 * (liquidLimit - 8));
+};
+
+/**
+ * Classify soil based on LL and PI using ASTM D2487 / BS 1377
+ * Returns classification code (CL, CH, ML, MH) or "Non-plastic"
+ */
+export const classifySoil = (liquidLimit: number | null, plasticityIndex: number | null): string => {
+  if (liquidLimit === null || plasticityIndex === null) return "No data";
+  if (plasticityIndex < 0) return "Non-plastic";
+  if (plasticityIndex === 0) return "Non-plastic";
+
+  const aLinePI = getALinePI(liquidLimit);
+  const isAboveALine = plasticityIndex > aLinePI;
+
+  if (liquidLimit < 50) {
+    return isAboveALine ? "Clay (CL)" : "Silt (ML)";
+  } else {
+    return isAboveALine ? "Clay (CH)" : "Silt (MH)";
+  }
+};
+
 export const calculateTestResult = (test: AtterbergTest): CalculatedResults => {
   switch (test.type) {
     case "liquidLimit": {

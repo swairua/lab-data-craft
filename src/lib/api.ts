@@ -75,8 +75,13 @@ export const loginUser = (email: string, password: string) =>
   );
 
 export const fetchCurrentUser = async () => {
-  const response = await apiRequest<CurrentUserResponse>(undefined, { action: "me" });
-  return response.user;
+  try {
+    const response = await apiRequest<CurrentUserResponse>(undefined, { action: "me" });
+    return response.user;
+  } catch (error) {
+    // API unavailable, not authenticated, or network error - return null gracefully
+    return null;
+  }
 };
 
 export interface ApiListResponse<T> {

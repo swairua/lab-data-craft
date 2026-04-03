@@ -78,21 +78,14 @@ const Index = ({ initialTab }: IndexProps) => {
     let isMounted = true;
 
     const restoreSession = async () => {
-      try {
-        const user = await fetchCurrentUser();
+      const user = await fetchCurrentUser();
 
-        if (!isMounted) return;
+      if (!isMounted) return;
 
-        if (user) {
-          setCurrentUser(user);
-          setAuthStatus("authenticated");
-          return;
-        }
-      } catch (error) {
-        console.error("Failed to restore user session:", error);
-      }
-
-      if (isMounted) {
+      if (user) {
+        setCurrentUser(user);
+        setAuthStatus("authenticated");
+      } else {
         setCurrentUser(null);
         setAuthStatus("unauthenticated");
       }
