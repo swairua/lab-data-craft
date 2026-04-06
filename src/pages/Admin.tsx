@@ -4,19 +4,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Upload, Loader2, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const UPLOAD_ENDPOINT = "https://lab.wayrus.co.ke/uploads";
+
+type ImageType = "logo" | "contacts" | "stamp";
 
 interface UploadedFile {
   name: string;
   size: number;
   uploadedAt: string;
+  type: ImageType;
 }
 
 const Admin = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedImageType, setSelectedImageType] = useState<ImageType>("logo");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
 
   const handleUpload = useCallback(async (files: FileList | null) => {
@@ -43,6 +54,7 @@ const Admin = () => {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("image_type", selectedImageType);
 
       const xhr = new XMLHttpRequest();
 
@@ -63,11 +75,13 @@ const Admin = () => {
               name: file.name,
               size: file.size,
               uploadedAt: new Date().toLocaleString(),
+              type: selectedImageType,
             },
             ...prev,
           ]);
 
-          toast.success(`Uploaded ${file.name}`);
+          const typeLabel = selectedImageType.charAt(0).toUpperCase() + selectedImageType.slice(1);
+          toast.success(`Uploaded ${typeLabel}: ${file.name}`);
           setUploadProgress(0);
         } else {
           toast.error(`Upload failed with status ${xhr.status}`);
@@ -127,7 +141,21 @@ const Admin = () => {
           <CardTitle>Image Upload</CardTitle>
           <CardDescription>Upload images to the lab media library</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Image Type</label>
+            <Select value={selectedImageType} onValueChange={(value) => setSelectedImageType(value as ImageType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="logo">Logo</SelectItem>
+                <SelectItem value="contacts">Contacts</SelectItem>
+                <SelectItem value="stamp">Stamp</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -192,7 +220,12 @@ const Admin = () => {
               {uploadedFiles.map((file, index) => (
                 <div key={index} className="flex items-center justify-between p-3 rounded-lg border border-muted">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
+                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+                        {file.type.charAt(0).toUpperCase() + file.type.slice(1)}
+                      </span>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {formatFileSize(file.size)} • {file.uploadedAt}
                     </p>
