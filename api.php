@@ -609,8 +609,139 @@ try {
         ]);
     }
 
+    // ============= IMAGE UPLOAD ENDPOINT =============
+    if ($_GET['action'] === 'upload' || $_POST['action'] === 'upload') {
+        // Enable error logging
+        ini_set('log_errors', 1);
+        ini_set('error_log', __DIR__ . '/uploads_error.log');
+        error_log("=== UPLOAD REQUEST START ===");
+
+        // Require authentication
+        $user = requireAuth($conn);
+        $userId = (int) $_SESSION['user_id'];
+
+        // Log request details
+        error_log("User ID: $userId");
+        error_log("Method: " . $_SERVER['REQUEST_METHOD']);
+        error_log("Files received: " . json_encode(array_keys($_FILES)));
+        error_log("Post data: " . json_encode($_POST));
+
+        // Validate image_type
+        $image_type = trim((string) ($_POST['image_type'] ?? $_GET['image_type'] ?? ''));
+        $allowed_types = ['logo', 'contacts', 'stamp'];
+
+        if (!$image_type || !in_array($image_type, $allowed_types, true)) {
+            error_log("ERROR: Invalid image_type: $image_type");
+            respond(['error' => 'Invalid image type. Must be: logo, contacts, or stamp'], 400);
+        }
+
+        error_log("Image type: $image_type");
+
+        // Check if file was uploaded
+        if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            $error = $_FILES['file']['error'] ?? 'Unknown error';
+            error_log("ERROR: File upload failed with code: $error");
+            respond(['error' => 'No file uploaded or upload error'], 400);
+        }
+
+        $file = $_FILES['file'];
+        error_log("File info: name={$file['name']}, size={$file['size']}, type={$file['type']}, tmp={$file['tmp_name']}");
+
+        // Validate file size (max 50MB)
+        $maxSize = 50 * 1024 * 1024;
+        if ($file['size'] > $maxSize) {
+            error_log("ERROR: File too large: {$file['size']} bytes");
+            respond(['error' => 'File too large. Maximum size is 50MB'], 413);
+        }
+
+        // Validate MIME type
+        $allowed_mimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!in_array($file['type'], $allowed_mimes, true)) {
+            error_log("ERROR: Invalid MIME type: {$file['type']}");
+            respond(['error' => 'Invalid file type. Allowed: JPG, PNG, GIF, WebP'], 400);
+        }
+
+        // Create upload directory
+        $upload_dir = __DIR__ . '/uploads/admin/' . $image_type . '/';
+        if (!is_dir($upload_dir)) {
+            if (!@mkdir($upload_dir, 0755, true)) {
+                error_log("ERROR: Failed to create directory: $upload_dir");
+                respond(['error' => 'Failed to create upload directory'], 500);
+            }
+            error_log("Created directory: $upload_dir");
+        }
+
+        // Generate unique filename
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $filename = $image_type . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+        $file_path = $upload_dir . $filename;
+        $relative_path = '/uploads/admin/' . $image_type . '/' . $filename;
+
+        error_log("Target file path: $file_path");
+
+        // Move uploaded file
+        if (!@move_uploaded_file($file['tmp_name'], $file_path)) {
+            error_log("ERROR: Failed to move uploaded file from {$file['tmp_name']} to $file_path");
+            respond(['error' => 'Failed to save uploaded file'], 500);
+        }
+
+        error_log("File successfully moved to: $file_path");
+
+        // Insert into database
+        try {
+            $stmt = $conn->prepare(
+                "INSERT INTO admin_images (image_type, file_path, original_filename, file_size, mime_type, uploaded_by)
+                 VALUES (?, ?, ?, ?, ?, ?)"
+            );
+
+            if (!$stmt) {
+                throw new Exception("Prepare failed: " . $conn->error);
+            }
+
+            $stmt->bind_param(
+                'sssisi',
+                $image_type,
+                $relative_path,
+                $file['name'],
+                $file['size'],
+                $file['type'],
+                $userId
+            );
+
+            if (!$stmt->execute()) {
+                throw new Exception("Execute failed: " . $stmt->error);
+            }
+
+            $image_id = $conn->insert_id;
+            error_log("Image record created with ID: $image_id");
+
+            respond([
+                'success' => true,
+                'message' => 'Image uploaded successfully',
+                'file_path' => $relative_path,
+                'image_id' => $image_id,
+                'image_type' => $image_type,
+            ], 200);
+
+        } catch (Exception $e) {
+            error_log("ERROR: Database insert failed: " . $e->getMessage());
+            // Clean up uploaded file if database insert fails
+            if (file_exists($file_path)) {
+                @unlink($file_path);
+                error_log("Cleaned up uploaded file due to database error");
+            }
+            respond(['error' => 'Failed to save image to database', 'details' => $e->getMessage()], 500);
+        }
+    }
+
     respond(['error' => 'Unsupported action'], 405);
 } catch (Throwable $e) {
+    error_log("=== UNCAUGHT EXCEPTION ===");
+    error_log("Error: " . $e->getMessage());
+    error_log("File: " . $e->getFile());
+    error_log("Line: " . $e->getLine());
+    error_log("Trace: " . $e->getTraceAsString());
+
     respond([
         'error' => 'Server error',
         'message' => $e->getMessage(),

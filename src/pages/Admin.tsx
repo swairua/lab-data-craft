@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const UPLOAD_ENDPOINT = "https://lab.wayrus.co.ke/uploads";
+const UPLOAD_ENDPOINT = "https://lab.wayrus.co.ke/api.php?action=upload";
 
 type ImageType = "logo" | "contacts" | "stamp";
 
@@ -130,6 +130,7 @@ const Admin = () => {
 
       console.log("Sending POST request to:", UPLOAD_ENDPOINT);
       xhr.open("POST", UPLOAD_ENDPOINT);
+      xhr.withCredentials = true;  // Include cookies for session authentication
       xhr.send(formData);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
