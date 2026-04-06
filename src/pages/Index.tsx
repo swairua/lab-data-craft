@@ -44,6 +44,7 @@ import DCPTest from "@/components/special/DCPTest";
 
 import Dashboard from "@/pages/Dashboard";
 import Reports from "@/pages/Reports";
+import Admin from "@/pages/Admin";
 import { fetchCurrentUser, loginUser, logoutUser, type ApiUser } from "@/lib/api";
 
 interface IndexProps {
@@ -58,7 +59,7 @@ const Index = ({ initialTab }: IndexProps) => {
   const testData = useTestData();
   const isTestsPage = location.pathname === "/tests";
   const isReportsPage = location.pathname === "/reports";
-  const [view, setView] = useState<"dashboard" | "tests" | "reports">(
+  const [view, setView] = useState<"dashboard" | "tests" | "reports" | "admin">(
     isReportsPage ? "reports" : isTestsPage ? "tests" : "dashboard",
   );
   const [projectName, setProjectName] = useState("");
@@ -222,6 +223,17 @@ const Index = ({ initialTab }: IndexProps) => {
                   >
                     <FileText className="h-4 w-4" /> Reports
                   </Button>
+                  <Button
+                    variant={view === "admin" ? "default" : "outline"}
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => {
+                      setView("admin");
+                      navigate("/");
+                    }}
+                  >
+                    <Hammer className="h-4 w-4" /> Admin
+                  </Button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
@@ -344,6 +356,8 @@ const Index = ({ initialTab }: IndexProps) => {
             <Dashboard />
           ) : view === "reports" ? (
             <Reports />
+          ) : view === "admin" ? (
+            <Admin />
           ) : (
             <Tabs defaultValue={initialTab || "soil"} className="w-full">
               <TabsList className="w-full grid grid-cols-4 mb-6 h-11">
