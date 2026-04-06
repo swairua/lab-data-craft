@@ -2,10 +2,26 @@
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_ORIGIN'] ?? '*'));
+
+// CORS headers - use specific origin instead of * when credentials are involved
+$allowed_origins = [
+    'https://lab.wayrus.co.ke',
+    'https://26823065fd2a4fa3bd380434d33615c0-gentle-road-nwozm8we.builderio.xyz',
+    'http://localhost:3000',
+    'http://localhost:5173',
+];
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if (in_array($origin, $allowed_origins, true)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Access-Control-Allow-Credentials: true');
+} else {
+    // Fallback for development
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Access-Control-Allow-Credentials: true');
+}
+
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-header('Access-Control-Allow-Credentials: true');
 
 // Session configuration
 session_set_cookie_params([
@@ -16,6 +32,8 @@ session_set_cookie_params([
 session_start();
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    // CORS preflight response - headers are already set above
+    http_response_code(200);
     exit;
 }
 
@@ -373,8 +391,20 @@ try {
         ini_set('error_log', __DIR__ . '/uploads_error.log');
         error_log("=== UPLOAD REQUEST START ===");
 
+        // Debug session info
+        error_log("Session ID: " . (isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET'));
+        error_log("Session session_id: " . ($_SESSION['session_id'] ?? 'NOT SET'));
+        error_log("PHPSESSID cookie: " . ($_COOKIE['PHPSESSID'] ?? 'NOT SET'));
+        error_log("All cookies: " . json_encode($_COOKIE));
+        error_log("Origin: " . ($_SERVER['HTTP_ORIGIN'] ?? 'NOT SET'));
+        error_log("User-Agent: " . ($_SERVER['HTTP_USER_AGENT'] ?? 'NOT SET'));
+
         // Require authentication
         $user = requireAuth($conn);
+        if (!$user) {
+            error_log("ERROR: Authentication failed");
+            respond(['error' => 'Unauthorized', 'debug' => 'Session validation failed'], 401);
+        }
         $userId = (int) $_SESSION['user_id'];
 
         // Log request details
