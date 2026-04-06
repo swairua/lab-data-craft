@@ -52,6 +52,15 @@ const Admin = () => {
     setUploadProgress(0);
 
     try {
+      // Log upload details
+      console.log("Starting upload:", {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        imageType: selectedImageType,
+        endpoint: UPLOAD_ENDPOINT,
+      });
+
       const formData = new FormData();
       formData.append("file", file);
       formData.append("image_type", selectedImageType);
@@ -68,6 +77,12 @@ const Admin = () => {
 
       // Handle completion
       xhr.addEventListener("load", () => {
+        console.log("Upload response:", {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          response: xhr.responseText,
+        });
+
         if (xhr.status >= 200 && xhr.status < 300) {
           // Add to uploaded files list
           setUploadedFiles((prev) => [
@@ -84,23 +99,45 @@ const Admin = () => {
           toast.success(`Uploaded ${typeLabel}: ${file.name}`);
           setUploadProgress(0);
         } else {
-          toast.error(`Upload failed with status ${xhr.status}`);
+          const errorMsg = xhr.responseText ? JSON.parse(xhr.responseText).error || xhr.statusText : xhr.statusText;
+          console.error("Upload error response:", errorMsg);
+          toast.error(`Upload failed: ${errorMsg || `Status ${xhr.status}`}`);
         }
       });
 
-      // Handle errors
+      // Handle network errors
       xhr.addEventListener("error", () => {
-        toast.error("Upload failed - network error");
+        console.error("Network error during upload", {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          endpoint: UPLOAD_ENDPOINT,
+        });
+        toast.error("Upload failed - network error. Check browser console for details.");
       });
 
       xhr.addEventListener("abort", () => {
+        console.warn("Upload cancelled by user");
         toast.error("Upload cancelled");
       });
 
+      // Set timeout to 5 minutes (300000 ms)
+      xhr.timeout = 300000;
+
+      xhr.addEventListener("timeout", () => {
+        console.error("Upload timeout - server took too long to respond");
+        toast.error("Upload timeout - server not responding");
+      });
+
+      console.log("Sending POST request to:", UPLOAD_ENDPOINT);
       xhr.open("POST", UPLOAD_ENDPOINT);
       xhr.send(formData);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed");
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      console.error("Upload exception:", {
+        error: errorMsg,
+        errorObj: error,
+      });
+      toast.error(`Upload error: ${errorMsg}`);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
