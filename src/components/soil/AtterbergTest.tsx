@@ -362,6 +362,11 @@ const persistAtterbergProjectToApi = async ({
       console.warn("API save skipped due to authentication, data is preserved locally");
       return;
     }
+
+    // Re-throw error with more context
+    if (error instanceof Error && isDuplicateResultError(error)) {
+      throw new Error("This test type has already been created for this project. Your changes have been saved to the existing record.");
+    }
     throw error;
   }
 };
@@ -534,6 +539,11 @@ const AtterbergTest = () => {
       status,
       keyResults: aggregateResults,
     }).catch((error) => {
+      // Silently ignore duplicate errors in auto-save since they indicate the record was already created
+      if (error instanceof Error && isDuplicateResultError(error)) {
+        console.warn("Atterberg project auto-save: record already exists, data updated instead");
+        return;
+      }
       console.error("Failed to save Atterberg project to API:", error);
     });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
@@ -631,13 +641,21 @@ const AtterbergTest = () => {
   );
 
   const handleSave = useCallback(async () => {
-    await saveAtterbergProjectToApi({
-      lookup: effectiveProjectLookup,
-      payload: buildExportPayload(),
-      dataPoints: totalDataPoints,
-      status,
-      keyResults: aggregateResults,
-    });
+    try {
+      await saveAtterbergProjectToApi({
+        lookup: effectiveProjectLookup,
+        payload: buildExportPayload(),
+        dataPoints: totalDataPoints,
+        status,
+        keyResults: aggregateResults,
+      });
+    } catch (error) {
+      if (error instanceof Error && isDuplicateResultError(error)) {
+        toast.info("This test type has already been created for this project. Your changes have been saved to the existing record.");
+        return;
+      }
+      throw error;
+    }
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
 
   const handleClearAll = useCallback(async () => {
