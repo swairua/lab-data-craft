@@ -69,6 +69,14 @@ type ComputedRecord = AtterbergRecord & {
   completedTests: number;
 };
 
+type SmokeCheckStatus = {
+  state: "idle" | "running" | "success" | "error";
+  pdf: "idle" | "running" | "success" | "error";
+  xlsx: "idle" | "running" | "success" | "error";
+  message: string;
+  detail?: string;
+};
+
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const testTypeLabels: Record<AtterbergTestType, string> = {
@@ -351,6 +359,7 @@ const AtterbergTest = () => {
   const project = useProject();
   const [projectState, setProjectState] = useState<AtterbergProjectState>({ records: [] });
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+  const [smokeCheckStatus, setSmokeCheckStatus] = useState<SmokeCheckStatus | null>(null);
   const hydratedRef = useRef(false);
   const loadAttemptedRef = useRef(false);
   const skipNextPersistRef = useRef(false);
@@ -693,6 +702,69 @@ const AtterbergTest = () => {
     return true;
   }, [computedRecords, project.clientName, project.date, project.projectName, projectState]);
 
+  const handleExportSmokeCheck = useCallback(async () => {
+    if (computedRecords.length === 0) {
+      setSmokeCheckStatus({
+        state: "error",
+        pdf: "idle",
+        xlsx: "idle",
+        message: "Smoke check unavailable",
+        detail: "Add at least one record before running the export check.",
+      });
+      return false;
+    }
+
+    setSmokeCheckStatus({
+      state: "running",
+      pdf: "running",
+      xlsx: "idle",
+      message: "Running export smoke check",
+      detail: "Generating the PDF and Excel downloads with the same image flow.",
+    });
+
+    const pdfExported = await handleExportPDF();
+    if (pdfExported === false) {
+      setSmokeCheckStatus({
+        state: "error",
+        pdf: "error",
+        xlsx: "idle",
+        message: "Smoke check failed",
+        detail: "PDF export did not complete.",
+      });
+      return false;
+    }
+
+    setSmokeCheckStatus({
+      state: "running",
+      pdf: "success",
+      xlsx: "running",
+      message: "PDF export complete",
+      detail: "Generating the Excel download next.",
+    });
+
+    const xlsxExported = await handleExportXLSX();
+    if (xlsxExported === false) {
+      setSmokeCheckStatus({
+        state: "error",
+        pdf: "success",
+        xlsx: "error",
+        message: "Smoke check failed",
+        detail: "Excel export did not complete.",
+      });
+      return false;
+    }
+
+    setSmokeCheckStatus({
+      state: "success",
+      pdf: "success",
+      xlsx: "success",
+      message: "Smoke check complete",
+      detail: "PDF and Excel downloads were generated. Verify the header images in both files.",
+    });
+
+    return true;
+  }, [computedRecords.length, handleExportPDF, handleExportXLSX]);
+
   return (
     <>
       <TestSection
@@ -702,6 +774,9 @@ const AtterbergTest = () => {
         onExportPDF={handleExportPDF}
         onExportCSV={handleExportCSV}
         onExportXLSX={handleExportXLSX}
+        onExportSmokeCheck={handleExportSmokeCheck}
+        exportSmokeCheckDisabled={computedRecords.length === 0}
+        smokeCheckStatus={smokeCheckStatus}
       >
       <div className="space-y-4 print:space-y-3">
         <Card className="border bg-muted/20 shadow-none print:border-border print:bg-transparent">

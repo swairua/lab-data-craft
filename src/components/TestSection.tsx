@@ -1,8 +1,18 @@
 import { ReactNode, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Save, Trash2, FileDown, FileSpreadsheet, Sheet } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, FileDown, FileSpreadsheet, FlaskConical, Loader2, Save, Sheet, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+
+type SmokeCheckItemStatus = "idle" | "running" | "success" | "error";
+
+type SmokeCheckStatus = {
+  state: SmokeCheckItemStatus;
+  pdf: SmokeCheckItemStatus;
+  xlsx: SmokeCheckItemStatus;
+  message: string;
+  detail?: string;
+};
 
 interface TestSectionProps {
   title: string;
@@ -12,9 +22,12 @@ interface TestSectionProps {
   onExportPDF?: () => boolean | void | Promise<boolean | void>;
   onExportCSV?: () => boolean | void;
   onExportXLSX?: () => boolean | void | Promise<boolean | void>;
+  onExportSmokeCheck?: () => boolean | void | Promise<boolean | void>;
+  exportSmokeCheckDisabled?: boolean;
+  smokeCheckStatus?: SmokeCheckStatus | null;
 }
 
-const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV, onExportXLSX }: TestSectionProps) => {
+const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV, onExportXLSX, onExportSmokeCheck, exportSmokeCheckDisabled, smokeCheckStatus }: TestSectionProps) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -29,6 +42,18 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
             {title}
           </CardTitle>
           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            {onExportSmokeCheck && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={exportSmokeCheckDisabled}
+                onClick={async () => {
+                  await onExportSmokeCheck();
+                }}
+              >
+                <FlaskConical className="h-3.5 w-3.5 mr-1" /> Smoke Check
+              </Button>
+            )}
             {onExportXLSX && (
               <Button
                 size="sm"
@@ -90,6 +115,51 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
             )}
           </div>
         </div>
+        {smokeCheckStatus && smokeCheckStatus.state !== "idle" && (
+          <div
+            className={`mt-3 rounded-md border px-3 py-2 text-xs ${
+              smokeCheckStatus.state === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : smokeCheckStatus.state === "error"
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : "border-blue-200 bg-blue-50 text-blue-800"
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              {smokeCheckStatus.state === "running" ? (
+                <Loader2 className="mt-0.5 h-3.5 w-3.5 animate-spin" />
+              ) : smokeCheckStatus.state === "success" ? (
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5" />
+              ) : (
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
+              )}
+              <div className="min-w-0 space-y-1">
+                <div className="font-medium">{smokeCheckStatus.message}</div>
+                {smokeCheckStatus.detail && <div className="text-current/80">{smokeCheckStatus.detail}</div>}
+                <div className="grid gap-1 pt-1">
+                  {[
+                    ["PDF", smokeCheckStatus.pdf],
+                    ["Excel", smokeCheckStatus.xlsx],
+                  ].map(([label, status]) => (
+                    <div key={label} className="flex items-center gap-2">
+                      {status === "running" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : status === "success" ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : status === "error" ? (
+                        <AlertCircle className="h-3.5 w-3.5" />
+                      ) : (
+                        <div className="h-3.5 w-3.5 rounded-full border border-current/40" />
+                      )}
+                      <span className="font-medium">{label}</span>
+                      <span className="text-current/70">{status === "success" ? "complete" : status === "running" ? "running" : status === "error" ? "failed" : "idle"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </CardHeader>
       {open && <CardContent className="px-4 pb-4 pt-0">{children}</CardContent>}
     </Card>
