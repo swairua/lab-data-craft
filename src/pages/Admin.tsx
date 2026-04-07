@@ -45,12 +45,21 @@ const Admin = () => {
     const fetchStoredImages = async () => {
       try {
         const url = buildApiUrl({ action: "list", table: "admin_images" });
+        console.log("Fetching admin images from:", url);
         const resp = await fetch(url, { credentials: "include" });
         if (!resp.ok) {
-          throw new Error("Failed to fetch images list");
+          console.warn("Failed to fetch images list:", resp.status);
+          // Set with no images but no error
+          setStoredImages({
+            logo: { type: "logo", loading: false },
+            contacts: { type: "contacts", loading: false },
+            stamp: { type: "stamp", loading: false },
+          });
+          return;
         }
         const json = await resp.json();
         const rows: Array<{ image_type: string; file_path: string }> = json?.data || [];
+        console.log("Admin images rows:", rows);
 
         // Get latest per type
         const latest: Record<string, string> = {};
@@ -59,17 +68,27 @@ const Admin = () => {
             latest[row.image_type] = row.file_path;
           }
         }
+        console.log("Latest images per type:", latest);
 
         // Helper to fetch and convert image to data URL
         const toDataUrl = async (path: string): Promise<string | undefined> => {
           try {
-            // Use relative fetch - let the browser handle the URL
-            const imgResp = await fetch(path, { credentials: "include" });
+            // Construct full URL from API base URL
+            const apiUrl = new URL(buildApiUrl());
+            const imageUrl = new URL(path, apiUrl.origin);
+            const fullUrl = imageUrl.toString();
+            console.log("Fetching image from:", fullUrl);
+
+            // Fetch with proper error handling
+            const imgResp = await fetch(fullUrl, {
+              credentials: "include",
+            });
             if (!imgResp.ok) {
-              console.warn(`Failed to fetch image: ${path}, status: ${imgResp.status}`);
+              console.warn(`Failed to fetch image: ${fullUrl}, status: ${imgResp.status}`);
               return undefined;
             }
             const blob = await imgResp.blob();
+            console.log(`Successfully fetched image: ${fullUrl}, size: ${blob.size}`);
             return new Promise((resolve) => {
               const reader = new FileReader();
               reader.onloadend = () => resolve(reader.result as string);
@@ -87,6 +106,12 @@ const Admin = () => {
           latest.contacts ? toDataUrl(latest.contacts) : Promise.resolve(undefined),
           latest.stamp ? toDataUrl(latest.stamp) : Promise.resolve(undefined),
         ]);
+
+        console.log("Fetch results:", {
+          logo: results[0] ? "loaded" : "not loaded",
+          contacts: results[1] ? "loaded" : "not loaded",
+          stamp: results[2] ? "loaded" : "not loaded",
+        });
 
         setStoredImages({
           logo: { type: "logo", dataUrl: results[0], loading: false },

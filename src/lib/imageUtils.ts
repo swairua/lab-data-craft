@@ -28,11 +28,14 @@ export async function fetchAdminImages(): Promise<AdminImages> {
       }
     }
 
-    const baseUrl = new URL(buildApiUrl()).origin;
-
     const toDataUrl = async (path: string): Promise<string | undefined> => {
       try {
-        const imgResp = await fetch(`${baseUrl}${path}`, { credentials: "include" });
+        // Construct full URL from API base URL
+        const apiUrl = new URL(buildApiUrl());
+        const imageUrl = new URL(path, apiUrl.origin);
+        const fullUrl = imageUrl.toString();
+
+        const imgResp = await fetch(fullUrl, { credentials: "include" });
         if (!imgResp.ok) return undefined;
         const blob = await imgResp.blob();
         return new Promise((resolve) => {
