@@ -47,7 +47,7 @@ const Admin = () => {
         const url = buildApiUrl({ action: "list", table: "admin_images" });
         const resp = await fetch(url, { credentials: "include" });
         if (!resp.ok) {
-          throw new Error("Failed to fetch images");
+          throw new Error("Failed to fetch images list");
         }
         const json = await resp.json();
         const rows: Array<{ image_type: string; file_path: string }> = json?.data || [];
@@ -60,41 +60,46 @@ const Admin = () => {
           }
         }
 
-        const baseUrl = new URL(buildApiUrl()).origin;
-
+        // Helper to fetch and convert image to data URL
         const toDataUrl = async (path: string): Promise<string | undefined> => {
           try {
-            const imgResp = await fetch(`${baseUrl}${path}`, { credentials: "include" });
-            if (!imgResp.ok) return undefined;
+            // Use relative fetch - let the browser handle the URL
+            const imgResp = await fetch(path, { credentials: "include" });
+            if (!imgResp.ok) {
+              console.warn(`Failed to fetch image: ${path}, status: ${imgResp.status}`);
+              return undefined;
+            }
             const blob = await imgResp.blob();
             return new Promise((resolve) => {
               const reader = new FileReader();
               reader.onloadend = () => resolve(reader.result as string);
               reader.readAsDataURL(blob);
             });
-          } catch {
+          } catch (error) {
+            console.warn(`Error fetching image from path: ${path}`, error);
             return undefined;
           }
         };
 
         // Fetch all three images in parallel
-        const [logo, contacts, stamp] = await Promise.all([
+        const results = await Promise.all([
           latest.logo ? toDataUrl(latest.logo) : Promise.resolve(undefined),
           latest.contacts ? toDataUrl(latest.contacts) : Promise.resolve(undefined),
           latest.stamp ? toDataUrl(latest.stamp) : Promise.resolve(undefined),
         ]);
 
         setStoredImages({
-          logo: { type: "logo", dataUrl: logo, loading: false },
-          contacts: { type: "contacts", dataUrl: contacts, loading: false },
-          stamp: { type: "stamp", dataUrl: stamp, loading: false },
+          logo: { type: "logo", dataUrl: results[0], loading: false },
+          contacts: { type: "contacts", dataUrl: results[1], loading: false },
+          stamp: { type: "stamp", dataUrl: results[2], loading: false },
         });
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        console.error("Error loading stored images:", error);
+        // Set as no error - just no images available
         setStoredImages({
-          logo: { type: "logo", loading: false, error: errorMsg },
-          contacts: { type: "contacts", loading: false, error: errorMsg },
-          stamp: { type: "stamp", loading: false, error: errorMsg },
+          logo: { type: "logo", loading: false },
+          contacts: { type: "contacts", loading: false },
+          stamp: { type: "stamp", loading: false },
         });
       }
     };
