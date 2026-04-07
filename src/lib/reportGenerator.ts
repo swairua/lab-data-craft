@@ -24,6 +24,13 @@ const statusLabels: Record<TestStatus, string> = {
   "completed": "Completed",
 };
 
+const escapeCSV = (value: string) => {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+};
+
 function addHeader(doc: jsPDF, title: string, project: ProjectInfo) {
   const pw = doc.internal.pageSize.getWidth();
   let y = 15;
@@ -230,16 +237,24 @@ export function generateProjectSummaryCSV(
   const lines: string[] = [
     "Engineering Material Testing - Project Summary",
     "",
-    `Project,${project.projectName || "—"}`,
-    `Client,${project.clientName || "—"}`,
-    `Date,${project.date}`,
+    `Project,${escapeCSV(project.projectName || "—")}`,
+    `Client,${escapeCSV(project.clientName || "—")}`,
+    `Date,${escapeCSV(project.date || "—")}`,
     "",
     "Test Name,Category,Status,Data Points,Key Results",
   ];
 
   for (const t of testList) {
     const results = t.keyResults.map(r => `${r.label}: ${r.value}`).join("; ") || "—";
-    lines.push(`"${t.name}",${t.category},${statusLabels[t.status]},${t.dataPoints},"${results}"`);
+    lines.push(
+      [
+        t.name,
+        t.category,
+        statusLabels[t.status],
+        String(t.dataPoints),
+        results,
+      ].map(escapeCSV).join(",")
+    );
   }
 
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });

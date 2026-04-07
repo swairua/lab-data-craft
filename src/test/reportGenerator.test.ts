@@ -141,13 +141,26 @@ describe("generateProjectSummaryCSV", () => {
     });
     URL.revokeObjectURL = vi.fn();
 
-    generateProjectSummaryCSV(project, {
+    const csvProject = {
+      projectName: "",
+      clientName: "",
+      date: "",
+    };
+
+    generateProjectSummaryCSV(csvProject, {
       "soil-1": {
-        name: "Atterberg Limits",
+        name: 'Atterberg, "Limits"',
         category: "soil",
         status: "completed",
         dataPoints: 3,
         keyResults: [{ label: "LL", value: "42" }],
+      },
+      "soil-2": {
+        name: "Empty Results",
+        category: "soil",
+        status: "not-started",
+        dataPoints: 0,
+        keyResults: [],
       },
     });
 
@@ -155,10 +168,12 @@ describe("generateProjectSummaryCSV", () => {
 
     expect(capturedContent).toContain("Engineering Material Testing - Project Summary");
     expect(downloadName).toBe("Project_Summary.csv");
-    expect(capturedContent).toContain("Project,Project A");
-    expect(capturedContent).toContain("Client,Client A");
+    expect(capturedContent).toContain("Project,—");
+    expect(capturedContent).toContain("Client,—");
+    expect(capturedContent).toContain("Date,—");
     expect(capturedContent).toContain("Test Name,Category,Status,Data Points,Key Results");
-    expect(capturedContent).toContain('"Atterberg Limits",soil,Completed,3,"LL: 42"');
+    expect(capturedContent).toContain('"Atterberg, ""Limits""",soil,Completed,3,LL: 42');
+    expect(capturedContent).toContain("Empty Results,soil,Not Started,0,—");
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:project-summary");
   });
 });
