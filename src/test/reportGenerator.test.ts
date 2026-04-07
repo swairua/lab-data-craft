@@ -39,30 +39,141 @@ vi.mock("jspdf-autotable", () => ({
   default: autoTable,
 }));
 
-import { generateDashboardReport } from "@/lib/reportGenerator";
+import { generateDashboardReport, generateProjectSummaryCSV, generateProjectSummaryReport } from "@/lib/reportGenerator";
 
-describe("generateDashboardReport", () => {
+const project = {
+  projectName: "Project A",
+  clientName: "Client A",
+  date: "2024-06-01",
+};
+
+describe("reportGenerator PDF exports", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("uses the autoTable helper instead of doc.autoTable", () => {
+  it("uses the autoTable helper for the dashboard export", () => {
     expect(() =>
-      generateDashboardReport(
-        { projectName: "Project A", clientName: "Client A", date: "2024-06-01" },
-        {
-          "soil-1": {
-            name: "Atterberg Limits",
-            category: "soil",
-            status: "completed",
-            dataPoints: 3,
-            keyResults: [{ label: "LL", value: "42" }],
-          },
+      generateDashboardReport(project, {
+        "soil-1": {
+          name: "Atterberg Limits",
+          category: "soil",
+          status: "completed",
+          dataPoints: 3,
+          keyResults: [{ label: "LL", value: "42" }],
         },
-      ),
+      }),
     ).not.toThrow();
 
     expect(autoTable).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith("Dashboard_Export.pdf");
+  });
+
+  it("uses the autoTable helper for the project summary export", () => {
+    expect(() =>
+      generateProjectSummaryReport(project, {
+        "soil-1": {
+          name: "Atterberg Limits",
+          category: "soil",
+          status: "completed",
+          dataPoints: 3,
+          keyResults: [{ label: "LL", value: "42" }],
+        },
+      }),
+    ).not.toThrow();
+
+    expect(autoTable).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith("Project_Summary_Report.pdf");
+  });
+});
+
+describe("generateProjectSummaryCSV", () => {
+  const originalCreateElement = document.createElement.bind(document);
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    document.createElement = originalCreateElement;
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+  });
+
+  it("creates a downloadable CSV for the project summary export", async () => {
+    let capturedContent = "";
+    let downloadName = "";
+
+    const readBlobText = (blob: Blob) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(blob);
+      });
+
+    document.createElement = vi.fn((tag: string) => {
+      if (tag === "a") {
+        const anchor = originalCreateElement(tag);
+        anchor.click = vi.fn();
+        Object.defineProperty(anchor, "download", {
+          set(value) {
+            downloadName = value;
+          },
+          get() {
+            return downloadName;
+          },
+          configurable: true,
+        });
+        return anchor;
+      }
+
+      return originalCreateElement(tag);
+    }) as typeof document.createElement;
+
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      void readBlobText(blob).then((text) => {
+        capturedContent = text;
+      });
+      return "blob:project-summary";
+    });
+    URL.revokeObjectURL = vi.fn();
+
+    const csvProject = {
+      projectName: "",
+      clientName: "",
+      date: "",
+    };
+
+    generateProjectSummaryCSV(csvProject, {
+      "soil-1": {
+        name: 'Atterberg, "Limits"',
+        category: "soil",
+        status: "completed",
+        dataPoints: 3,
+        keyResults: [{ label: "LL", value: "42" }],
+      },
+      "soil-2": {
+        name: "Empty Results",
+        category: "soil",
+        status: "not-started",
+        dataPoints: 0,
+        keyResults: [],
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(capturedContent).toContain("Engineering Material Testing - Project Summary");
+    expect(downloadName).toBe("Project_Summary.csv");
+    expect(capturedContent).toContain("Project,—");
+    expect(capturedContent).toContain("Client,—");
+    expect(capturedContent).toContain("Date,—");
+    expect(capturedContent).toContain("Test Name,Category,Status,Data Points,Key Results");
+    expect(capturedContent).toContain('"Atterberg, ""Limits""",soil,Completed,3,LL: 42');
+    expect(capturedContent).toContain("Empty Results,soil,Not Started,0,—");
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:project-summary");
   });
 });

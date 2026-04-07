@@ -82,9 +82,13 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const exported = onExportPDF();
-                  if (exported !== false) toast.success(`${title} PDF downloaded`);
+                onClick={async () => {
+                  try {
+                    const exported = await onExportPDF();
+                    if (exported !== false) toast.success(`${title} PDF downloaded`);
+                  } catch {
+                    toast.error(`${title} PDF download failed`);
+                  }
                 }}
               >
                 <FileDown className="h-3.5 w-3.5 mr-1" /> PDF

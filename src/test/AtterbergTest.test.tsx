@@ -5,11 +5,12 @@ import AtterbergTestComponent from "@/components/soil/AtterbergTest";
 import AtterbergTestCard from "@/components/soil/AtterbergTestCard";
 import type { AtterbergTest } from "@/context/TestDataContext";
 
-const { toastError, toastSuccess, generateTestPDF, generateTestCSV, useProject, useTestReport, listRecords, createRecord, updateRecord, deleteRecord } = vi.hoisted(() => ({
+const { toastError, toastSuccess, generateTestPDF, generateTestCSV, generateAtterbergPDF, useProject, useTestReport, listRecords, createRecord, updateRecord, deleteRecord } = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   generateTestPDF: vi.fn(),
   generateTestCSV: vi.fn(),
+  generateAtterbergPDF: vi.fn(),
   useProject: vi.fn(),
   useTestReport: vi.fn(),
   listRecords: vi.fn(),
@@ -39,6 +40,10 @@ vi.mock("@/lib/pdfGenerator", () => ({
 
 vi.mock("@/lib/csvExporter", () => ({
   generateTestCSV,
+}));
+
+vi.mock("@/lib/atterbergPdfGenerator", () => ({
+  generateAtterbergPDF,
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -151,9 +156,67 @@ describe("Atterberg UI", () => {
     fireEvent.click(screen.getByRole("button", { name: /CSV/i }));
 
     expect(toastError).toHaveBeenCalledTimes(2);
-    expect(toastSuccess).toHaveBeenCalledTimes(1);
+    expect(toastSuccess).not.toHaveBeenCalled();
     expect(generateTestPDF).not.toHaveBeenCalled();
     expect(generateTestCSV).not.toHaveBeenCalled();
+  });
+
+  it("waits for the PDF export promise before showing success", async () => {
+    const deferred = createDeferred<void>();
+
+    listRecords.mockImplementation(async (table: string) => {
+      if (table === "projects") {
+        return { table, data: [{ id: 7, name: "Project A", client_name: "Client A", project_date: "2024-06-01" }], limit: 1000, offset: 0 };
+      }
+
+      if (table === "test_results") {
+        return {
+          table,
+          data: [
+            {
+              id: 101,
+              project_id: 7,
+              test_key: "atterberg",
+              payload_json: {
+                records: [
+                  {
+                    id: "record-1",
+                    title: "Record 1",
+                    label: "BH-1",
+                    note: "",
+                    isExpanded: true,
+                    tests: [],
+                    results: {},
+                  },
+                ],
+              },
+            },
+          ],
+          limit: 1000,
+          offset: 0,
+        };
+      }
+
+      return { table, data: [], limit: 1000, offset: 0 };
+    });
+
+    generateAtterbergPDF.mockReturnValueOnce(deferred.promise);
+
+    render(<AtterbergTestComponent />);
+
+    await waitFor(() => expect(listRecords).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByText("Atterberg Limits Testing"));
+    fireEvent.click(screen.getByRole("button", { name: /PDF/i }));
+
+    expect(generateAtterbergPDF).toHaveBeenCalledTimes(1);
+    expect(toastSuccess).not.toHaveBeenCalledWith("Atterberg Limits Testing PDF downloaded");
+
+    deferred.resolve();
+
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("Atterberg Limits Testing PDF downloaded");
+    });
   });
 
   it("asks for confirmation before clearing the Atterberg project", async () => {
