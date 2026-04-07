@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import { TestSummary, TestStatus } from "@/context/TestDataContext";
 
 interface ProjectInfo {
@@ -159,7 +159,7 @@ export function generateProjectSummaryReport(
       t.keyResults.map(r => `${r.label}: ${r.value}`).join("; ") || "—",
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: y,
       head: [["Test", "Status", "Data Points", "Key Results"]],
       body: tableRows,
@@ -175,7 +175,7 @@ export function generateProjectSummaryReport(
       margin: { left: 14, right: 14 },
       styles: { cellPadding: 2.5 },
     });
-    y = (doc as any).lastAutoTable.finalY + 10;
+    y = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 10 : y + 10;
   }
 
   addFooter(doc);
@@ -199,7 +199,7 @@ export function generateDashboardReport(
     t.keyResults.map(r => `${r.label}: ${r.value}`).join("; ") || "—",
   ]);
 
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: y,
     head: [["Test Name", "Category", "Status", "Points", "Results"]],
     body: allRows,

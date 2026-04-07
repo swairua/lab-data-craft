@@ -211,6 +211,13 @@ const getAtterbergLookup = (projectName: string, clientName: string, projectDate
 
 const hasLookupCriteria = (lookup: AtterbergProjectLookup) => lookup.projectName !== "" || lookup.clientName !== "" || lookup.projectDate !== "";
 
+let atterbergSaveQueue: Promise<void> = Promise.resolve();
+
+const getAtterbergResultsForProject = (rows: ApiAtterbergResultRow[], projectId: number) =>
+  rows.filter((row) => row.test_key === "atterberg" && Number(row.project_id) === projectId);
+
+const isDuplicateResultError = (error: unknown) => error instanceof Error && /duplicate|unique|uq_test_results_project/i.test(error.message);
+
 const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
   try {
     const [projectsResponse, resultsResponse] = await Promise.all([
@@ -240,7 +247,7 @@ const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
   }
 };
 
-const saveAtterbergProjectToApi = async ({
+const persistAtterbergProjectToApi = async ({
   lookup,
   payload,
   dataPoints,
@@ -286,7 +293,7 @@ const saveAtterbergProjectToApi = async ({
       throw new Error("Unable to save project");
     }
 
-    const existingResult = resultsResponse.data.find((row) => row.test_key === "atterberg" && Number(row.project_id) === projectRow.id) ?? null;
+    let matchingResults = getAtterbergResultsForProject(resultsResponse.data, projectRow.id);
     const resultPayload = {
       project_id: projectRow.id,
       test_key: "atterberg",
@@ -298,10 +305,33 @@ const saveAtterbergProjectToApi = async ({
       payload_json: payload,
     };
 
-    if (existingResult) {
-      await updateApiRecord("test_results", existingResult.id, resultPayload);
+    if (matchingResults[0]) {
+      await updateApiRecord("test_results", matchingResults[0].id, resultPayload);
     } else {
-      await createApiRecord("test_results", resultPayload);
+      try {
+        await createApiRecord("test_results", resultPayload);
+      } catch (error) {
+        if (!isDuplicateResultError(error)) {
+          throw error;
+        }
+
+        const latestResultsResponse = await listRecords<ApiAtterbergResultRow>("test_results", {
+          limit: 1000,
+          orderBy: "updated_at",
+          direction: "DESC",
+        });
+        matchingResults = getAtterbergResultsForProject(latestResultsResponse.data, projectRow.id);
+
+        if (!matchingResults[0]) {
+          throw error;
+        }
+
+        await updateApiRecord("test_results", matchingResults[0].id, resultPayload);
+      }
+    }
+
+    if (matchingResults.length > 1) {
+      await Promise.allSettled(matchingResults.slice(1).map((row) => deleteApiRecord("test_results", row.id)));
     }
   } catch (error) {
     // If auth fails, silently continue (auto-save is non-critical)
@@ -313,6 +343,18 @@ const saveAtterbergProjectToApi = async ({
   }
 };
 
+const saveAtterbergProjectToApi = (args: {
+  lookup: AtterbergProjectLookup;
+  payload: AtterbergExportPayload;
+  dataPoints: number;
+  status: string;
+  keyResults: Array<{ label: string; value: string }>;
+}) => {
+  const queuedSave = atterbergSaveQueue.then(() => persistAtterbergProjectToApi(args), () => persistAtterbergProjectToApi(args));
+  atterbergSaveQueue = queuedSave.then(() => undefined, () => undefined);
+  return queuedSave;
+};
+
 const clearAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
   try {
     const [projectsResponse, resultsResponse] = await Promise.all([
@@ -320,19 +362,20 @@ const clearAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
       listRecords<ApiAtterbergResultRow>("test_results", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
     ]);
 
-    let resultRow = null as ApiAtterbergResultRow | null;
+    let resultRows: ApiAtterbergResultRow[] = [];
 
     if (hasLookupCriteria(lookup)) {
       const projectRow = projectsResponse.data.find((row) => matchesProjectLookup(row, lookup)) ?? null;
       if (projectRow) {
-        resultRow = resultsResponse.data.find((row) => row.test_key === "atterberg" && Number(row.project_id) === projectRow.id) ?? null;
+        resultRows = getAtterbergResultsForProject(resultsResponse.data, projectRow.id);
       }
     } else {
-      resultRow = resultsResponse.data.find((row) => row.test_key === "atterberg" && row.payload_json) ?? null;
+      const latestResult = resultsResponse.data.find((row) => row.test_key === "atterberg" && row.payload_json) ?? null;
+      resultRows = latestResult ? [latestResult] : [];
     }
 
-    if (resultRow) {
-      await deleteApiRecord("test_results", resultRow.id);
+    if (resultRows.length > 0) {
+      await Promise.all(resultRows.map((row) => deleteApiRecord("test_results", row.id)));
     }
   } catch (error) {
     // If auth fails, log warning but still allow local clear
