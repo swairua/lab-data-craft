@@ -693,6 +693,20 @@ const AtterbergTest = () => {
     return true;
   }, [computedRecords, project.clientName, project.date, project.projectName, projectState]);
 
+  const handleExportSmokeCheck = useCallback(async () => {
+    const pdfExported = await handleExportPDF();
+    if (pdfExported === false) {
+      return false;
+    }
+
+    const xlsxExported = await handleExportXLSX();
+    if (xlsxExported === false) {
+      return false;
+    }
+
+    return true;
+  }, [handleExportPDF, handleExportXLSX]);
+
   return (
     <>
       <TestSection
@@ -702,6 +716,8 @@ const AtterbergTest = () => {
         onExportPDF={handleExportPDF}
         onExportCSV={handleExportCSV}
         onExportXLSX={handleExportXLSX}
+        onExportSmokeCheck={handleExportSmokeCheck}
+        exportSmokeCheckDisabled={computedRecords.length === 0}
       >
       <div className="space-y-4 print:space-y-3">
         <Card className="border bg-muted/20 shadow-none print:border-border print:bg-transparent">

@@ -1,7 +1,7 @@
 import { ReactNode, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Save, Trash2, FileDown, FileSpreadsheet, Sheet } from "lucide-react";
+import { ChevronDown, ChevronRight, Save, Trash2, FileDown, FileSpreadsheet, Sheet, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 
 interface TestSectionProps {
@@ -12,9 +12,11 @@ interface TestSectionProps {
   onExportPDF?: () => boolean | void | Promise<boolean | void>;
   onExportCSV?: () => boolean | void;
   onExportXLSX?: () => boolean | void | Promise<boolean | void>;
+  onExportSmokeCheck?: () => boolean | void | Promise<boolean | void>;
+  exportSmokeCheckDisabled?: boolean;
 }
 
-const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV, onExportXLSX }: TestSectionProps) => {
+const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV, onExportXLSX, onExportSmokeCheck, exportSmokeCheckDisabled }: TestSectionProps) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -29,6 +31,19 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
             {title}
           </CardTitle>
           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            {onExportSmokeCheck && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={exportSmokeCheckDisabled}
+                onClick={async () => {
+                  const exported = await onExportSmokeCheck();
+                  if (exported !== false) toast.success(`${title} smoke check completed`);
+                }}
+              >
+                <FlaskConical className="h-3.5 w-3.5 mr-1" /> Smoke Check
+              </Button>
+            )}
             {onExportXLSX && (
               <Button
                 size="sm"
