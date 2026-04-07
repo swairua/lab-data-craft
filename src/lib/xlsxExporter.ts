@@ -7,7 +7,7 @@ import type {
   ShrinkageLimitTrial,
 } from "@/context/TestDataContext";
 import { calculateMoistureFromMass, getTrialMoisture } from "./atterbergCalculations";
-import { fetchAdminImages } from "./imageUtils";
+import { fetchAdminImagesAsBase64 } from "./imageUtils";
 
 interface ExportOptions {
   projectName?: string;
@@ -56,7 +56,7 @@ export const generateAtterbergXLSX = async (options: ExportOptions) => {
   wb.created = new Date();
 
   // Fetch admin images once for all records
-  const images = await fetchAdminImages();
+  const images = await fetchAdminImagesAsBase64();
 
   for (const record of records) {
     const sheetName = (record.label || record.title || "Record").substring(0, 31);

@@ -6,52 +6,97 @@ export interface AdminImages {
   stamp?: string;
 }
 
-/**
- * Fetches admin images (logo, contacts, stamp) from the admin_images API table.
- * Images are converted to base64 data URLs for embedding in documents.
- * Missing images are silently skipped.
- */
-export async function fetchAdminImages(): Promise<AdminImages> {
-  const images: AdminImages = {};
-  try {
-    const url = buildApiUrl({ action: "list", table: "admin_images" });
-    const resp = await fetch(url, { credentials: "include" });
-    if (!resp.ok) return images;
-    const json = await resp.json();
-    const rows: Array<{ image_type: string; file_path: string }> = json?.data || [];
+type AdminImageType = "logo" | "contacts" | "stamp";
+type AdminImageRow = { image_type: string; file_path: string };
+type AdminImagePaths = Partial<Record<AdminImageType, string>>;
 
-    // Get latest per type
-    const latest: Record<string, string> = {};
-    for (const row of rows) {
+const getAdminImageUrl = (path: string) => {
+  const apiUrl = new URL(buildApiUrl());
+  return new URL(path, apiUrl.origin).toString();
+};
+
+const listAdminImagePaths = async (): Promise<AdminImagePaths> => {
+  const latest: AdminImagePaths = {};
+  const url = buildApiUrl({ action: "list", table: "admin_images" });
+  const resp = await fetch(url, { credentials: "include" });
+
+  if (!resp.ok) {
+    return latest;
+  }
+
+  const json = await resp.json();
+  const rows: AdminImageRow[] = json?.data || [];
+
+  for (const row of rows) {
+    if (row.image_type === "logo" || row.image_type === "contacts" || row.image_type === "stamp") {
       if (!latest[row.image_type]) {
         latest[row.image_type] = row.file_path;
       }
     }
+  }
 
-    const toDataUrl = async (path: string): Promise<string | undefined> => {
+  return latest;
+};
+
+const imagePathToBase64 = async (filePath: string): Promise<string | undefined> => {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+
+  const imageUrl = getAdminImageUrl(filePath);
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.decoding = "async";
+
+    img.onload = () => {
       try {
-        // Construct full URL from API base URL
-        const apiUrl = new URL(buildApiUrl());
-        const imageUrl = new URL(path, apiUrl.origin);
-        const fullUrl = imageUrl.toString();
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
 
-        const imgResp = await fetch(fullUrl, { credentials: "include" });
-        if (!imgResp.ok) return undefined;
-        const blob = await imgResp.blob();
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
+        if (!width || !height) {
+          resolve(undefined);
+          return;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(undefined);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/png"));
       } catch {
-        return undefined;
+        resolve(undefined);
       }
     };
 
+    img.onerror = () => resolve(undefined);
+    img.src = imageUrl;
+  });
+};
+
+/**
+ * Fetches admin images (logo, contacts, stamp) from the admin_images API table.
+ * Images are loaded through the same browser image URL flow as the admin preview,
+ * then converted to base64 data URLs for embedding in documents.
+ * Missing images are silently skipped.
+ */
+export async function fetchAdminImagesAsBase64(): Promise<AdminImages> {
+  const images: AdminImages = {};
+
+  try {
+    const latest = await listAdminImagePaths();
     const [logo, contacts, stamp] = await Promise.all([
-      latest.logo ? toDataUrl(latest.logo) : Promise.resolve(undefined),
-      latest.contacts ? toDataUrl(latest.contacts) : Promise.resolve(undefined),
-      latest.stamp ? toDataUrl(latest.stamp) : Promise.resolve(undefined),
+      latest.logo ? imagePathToBase64(latest.logo) : Promise.resolve(undefined),
+      latest.contacts ? imagePathToBase64(latest.contacts) : Promise.resolve(undefined),
+      latest.stamp ? imagePathToBase64(latest.stamp) : Promise.resolve(undefined),
     ]);
 
     images.logo = logo;
@@ -60,5 +105,10 @@ export async function fetchAdminImages(): Promise<AdminImages> {
   } catch {
     // Silently fail – images are optional
   }
+
   return images;
+}
+
+export async function fetchAdminImages(): Promise<AdminImages> {
+  return fetchAdminImagesAsBase64();
 }

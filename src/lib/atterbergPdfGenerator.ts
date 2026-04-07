@@ -8,7 +8,7 @@ import type {
   ShrinkageLimitTrial,
 } from "@/context/TestDataContext";
 import { calculateMoistureFromMass } from "./atterbergCalculations";
-import { fetchAdminImages, type AdminImages } from "./imageUtils";
+import { fetchAdminImagesAsBase64, type AdminImages } from "./imageUtils";
 
 interface AtterbergPDFOptions {
   projectName?: string;
@@ -656,7 +656,7 @@ function drawRecordPage(
 
 export const generateAtterbergPDF = async (options: AtterbergPDFOptions) => {
   // Fetch images in parallel with PDF setup
-  const images = await fetchAdminImages();
+  const images = await fetchAdminImagesAsBase64();
 
   const doc = new jsPDF();
 
