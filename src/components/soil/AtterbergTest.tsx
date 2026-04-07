@@ -362,6 +362,13 @@ const persistAtterbergProjectToApi = async ({
       console.warn("API save skipped due to authentication, data is preserved locally");
       return;
     }
+
+    // Duplicate errors should have been handled in the inner catch block
+    // If we still have a duplicate error here, log it and continue silently
+    if (error instanceof Error && isDuplicateResultError(error)) {
+      console.warn("Atterberg project: duplicate record was attempted but handled by update logic");
+      return;
+    }
     throw error;
   }
 };
@@ -534,6 +541,11 @@ const AtterbergTest = () => {
       status,
       keyResults: aggregateResults,
     }).catch((error) => {
+      // Silently ignore duplicate errors in auto-save since they indicate the record was already created
+      if (error instanceof Error && isDuplicateResultError(error)) {
+        console.warn("Atterberg project auto-save: record already exists, data updated instead");
+        return;
+      }
       console.error("Failed to save Atterberg project to API:", error);
     });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
