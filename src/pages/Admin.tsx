@@ -24,7 +24,7 @@ interface UploadedFile {
 
 interface StoredImage {
   type: ImageType;
-  dataUrl?: string;
+  filePath?: string;
   loading: boolean;
   error?: string;
 }
@@ -45,10 +45,8 @@ const Admin = () => {
     const fetchStoredImages = async () => {
       try {
         const url = buildApiUrl({ action: "list", table: "admin_images" });
-        console.log("Fetching admin images from:", url);
         const resp = await fetch(url, { credentials: "include" });
         if (!resp.ok) {
-          console.warn("Failed to fetch images list:", resp.status);
           // Set with no images but no error
           setStoredImages({
             logo: { type: "logo", loading: false },
@@ -59,7 +57,6 @@ const Admin = () => {
         }
         const json = await resp.json();
         const rows: Array<{ image_type: string; file_path: string }> = json?.data || [];
-        console.log("Admin images rows:", rows);
 
         // Get latest per type
         const latest: Record<string, string> = {};
@@ -68,55 +65,32 @@ const Admin = () => {
             latest[row.image_type] = row.file_path;
           }
         }
-        console.log("Latest images per type:", latest);
 
-        // Helper to fetch and convert image to data URL
-        const toDataUrl = async (path: string): Promise<string | undefined> => {
-          try {
-            // Construct full URL from API base URL
-            const apiUrl = new URL(buildApiUrl());
-            const imageUrl = new URL(path, apiUrl.origin);
-            const fullUrl = imageUrl.toString();
-            console.log("Fetching image from:", fullUrl);
+        // Construct full URLs for images
+        const apiUrl = new URL(buildApiUrl());
+        const baseOrigin = apiUrl.origin;
 
-            // Fetch with proper error handling
-            const imgResp = await fetch(fullUrl, {
-              credentials: "include",
-            });
-            if (!imgResp.ok) {
-              console.warn(`Failed to fetch image: ${fullUrl}, status: ${imgResp.status}`);
-              return undefined;
-            }
-            const blob = await imgResp.blob();
-            console.log(`Successfully fetched image: ${fullUrl}, size: ${blob.size}`);
-            return new Promise((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-          } catch (error) {
-            console.warn(`Error fetching image from path: ${path}`, error);
-            return undefined;
-          }
+        const getImageUrl = (path: string): string => {
+          const imageUrl = new URL(path, baseOrigin);
+          return imageUrl.toString();
         };
 
-        // Fetch all three images in parallel
-        const results = await Promise.all([
-          latest.logo ? toDataUrl(latest.logo) : Promise.resolve(undefined),
-          latest.contacts ? toDataUrl(latest.contacts) : Promise.resolve(undefined),
-          latest.stamp ? toDataUrl(latest.stamp) : Promise.resolve(undefined),
-        ]);
-
-        console.log("Fetch results:", {
-          logo: results[0] ? "loaded" : "not loaded",
-          contacts: results[1] ? "loaded" : "not loaded",
-          stamp: results[2] ? "loaded" : "not loaded",
-        });
-
         setStoredImages({
-          logo: { type: "logo", dataUrl: results[0], loading: false },
-          contacts: { type: "contacts", dataUrl: results[1], loading: false },
-          stamp: { type: "stamp", dataUrl: results[2], loading: false },
+          logo: {
+            type: "logo",
+            filePath: latest.logo ? getImageUrl(latest.logo) : undefined,
+            loading: false
+          },
+          contacts: {
+            type: "contacts",
+            filePath: latest.contacts ? getImageUrl(latest.contacts) : undefined,
+            loading: false
+          },
+          stamp: {
+            type: "stamp",
+            filePath: latest.stamp ? getImageUrl(latest.stamp) : undefined,
+            loading: false
+          },
         });
       } catch (error) {
         console.error("Error loading stored images:", error);
@@ -249,12 +223,10 @@ const Admin = () => {
               <div className="border rounded-lg overflow-hidden bg-muted min-h-[150px] flex items-center justify-center">
                 {storedImages.logo.loading ? (
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                ) : storedImages.logo.error ? (
-                  <p className="text-xs text-muted-foreground text-center px-2">No logo uploaded</p>
-                ) : storedImages.logo.dataUrl ? (
-                  <img src={storedImages.logo.dataUrl} alt="Logo" className="h-full w-full object-contain p-2" />
+                ) : storedImages.logo.filePath ? (
+                  <img src={storedImages.logo.filePath} alt="Logo" className="h-full w-full object-contain p-2" />
                 ) : (
-                  <p className="text-xs text-muted-foreground">No logo</p>
+                  <p className="text-xs text-muted-foreground">No logo uploaded</p>
                 )}
               </div>
             </div>
@@ -265,12 +237,10 @@ const Admin = () => {
               <div className="border rounded-lg overflow-hidden bg-muted min-h-[150px] flex items-center justify-center">
                 {storedImages.contacts.loading ? (
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                ) : storedImages.contacts.error ? (
-                  <p className="text-xs text-muted-foreground text-center px-2">No contacts uploaded</p>
-                ) : storedImages.contacts.dataUrl ? (
-                  <img src={storedImages.contacts.dataUrl} alt="Contacts" className="h-full w-full object-contain p-2" />
+                ) : storedImages.contacts.filePath ? (
+                  <img src={storedImages.contacts.filePath} alt="Contacts" className="h-full w-full object-contain p-2" />
                 ) : (
-                  <p className="text-xs text-muted-foreground">No contacts</p>
+                  <p className="text-xs text-muted-foreground">No contacts uploaded</p>
                 )}
               </div>
             </div>
@@ -281,12 +251,10 @@ const Admin = () => {
               <div className="border rounded-lg overflow-hidden bg-muted min-h-[150px] flex items-center justify-center">
                 {storedImages.stamp.loading ? (
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                ) : storedImages.stamp.error ? (
-                  <p className="text-xs text-muted-foreground text-center px-2">No stamp uploaded</p>
-                ) : storedImages.stamp.dataUrl ? (
-                  <img src={storedImages.stamp.dataUrl} alt="Stamp" className="h-full w-full object-contain p-2" />
+                ) : storedImages.stamp.filePath ? (
+                  <img src={storedImages.stamp.filePath} alt="Stamp" className="h-full w-full object-contain p-2" />
                 ) : (
-                  <p className="text-xs text-muted-foreground">No stamp</p>
+                  <p className="text-xs text-muted-foreground">No stamp uploaded</p>
                 )}
               </div>
             </div>
