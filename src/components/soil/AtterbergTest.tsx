@@ -305,33 +305,56 @@ const persistAtterbergProjectToApi = async ({
       payload_json: payload,
     };
 
-    if (matchingResults[0]) {
-      await updateApiRecord("test_results", matchingResults[0].id, resultPayload);
+    // Always try to find and update existing record
+    // If multiple exist, update the most recent one (highest ID)
+    if (matchingResults.length > 0) {
+      const mostRecent = matchingResults.reduce((prev, curr) => (curr.id > prev.id ? curr : prev));
+
+      // Try to update the most recent record
+      await updateApiRecord("test_results", mostRecent.id, resultPayload);
+
+      // Clean up other duplicates in the background (don't block if they fail)
+      if (matchingResults.length > 1) {
+        const toDelete = matchingResults.filter((r) => r.id !== mostRecent.id);
+        Promise.allSettled(toDelete.map((row) => deleteApiRecord("test_results", row.id))).catch(() => {
+          // Silently ignore cleanup failures - the important data is saved
+        });
+      }
     } else {
+      // No record exists, try to create one
       try {
         await createApiRecord("test_results", resultPayload);
       } catch (error) {
+        // If duplicate error, another process may have created it while we were saving
         if (!isDuplicateResultError(error)) {
           throw error;
         }
 
+        // Refetch latest data and try to update instead
         const latestResultsResponse = await listRecords<ApiAtterbergResultRow>("test_results", {
           limit: 1000,
           orderBy: "updated_at",
           direction: "DESC",
         });
-        matchingResults = getAtterbergResultsForProject(latestResultsResponse.data, projectRow.id);
+        const refetchedResults = getAtterbergResultsForProject(latestResultsResponse.data, projectRow.id);
 
-        if (!matchingResults[0]) {
+        if (!refetchedResults[0]) {
+          // Still no record found, something is wrong
           throw error;
         }
 
-        await updateApiRecord("test_results", matchingResults[0].id, resultPayload);
-      }
-    }
+        // Update the most recent record
+        const mostRecent = refetchedResults.reduce((prev, curr) => (curr.id > prev.id ? curr : prev));
+        await updateApiRecord("test_results", mostRecent.id, resultPayload);
 
-    if (matchingResults.length > 1) {
-      await Promise.allSettled(matchingResults.slice(1).map((row) => deleteApiRecord("test_results", row.id)));
+        // Clean up duplicates in background
+        if (refetchedResults.length > 1) {
+          const toDelete = refetchedResults.filter((r) => r.id !== mostRecent.id);
+          Promise.allSettled(toDelete.map((row) => deleteApiRecord("test_results", row.id))).catch(() => {
+            // Silently ignore cleanup failures
+          });
+        }
+      }
     }
   } catch (error) {
     // If auth fails, silently continue (auto-save is non-critical)
@@ -728,6 +751,79 @@ const AtterbergTest = () => {
     return true;
   }, [aggregateResults, computedRecords.length, exportTables, project.clientName, project.date, project.projectName, projectState.clientName, projectState.labOrganization, projectState.dateReported, projectState.checkedBy]);
 
+  const handleRecordExportPDF = useCallback(
+    async (recordId: string) => {
+      const record = computedRecords.find((r) => r.id === recordId);
+      if (!record) {
+        toast.error("Record not found");
+        return false;
+      }
+
+      await generateAtterbergPDF({
+        projectName: project.projectName,
+        clientName: project.clientName || projectState.clientName,
+        date: project.date,
+        projectState,
+        records: [record],
+      });
+
+      return true;
+    },
+    [computedRecords, project.clientName, project.date, project.projectName, projectState],
+  );
+
+  const handleRecordExportXLSX = useCallback(
+    async (recordId: string) => {
+      const record = computedRecords.find((r) => r.id === recordId);
+      if (!record) {
+        toast.error("Record not found");
+        return false;
+      }
+
+      await generateAtterbergXLSX({
+        projectName: project.projectName,
+        clientName: project.clientName || projectState.clientName,
+        date: project.date,
+        projectState,
+        records: [record],
+      });
+
+      return true;
+    },
+    [computedRecords, project.clientName, project.date, project.projectName, projectState],
+  );
+
+  const handleRecordExportJSON = useCallback(
+    (recordId: string) => {
+      const record = persistedState.records.find((r) => r.id === recordId);
+      if (!record) {
+        toast.error("Record not found");
+        return false;
+      }
+
+      const singleRecordPayload: AtterbergExportPayload = {
+        exportDate: new Date().toISOString(),
+        version: "3.0",
+        project: {
+          title: project.projectName || "Atterberg Limits Testing",
+          clientName: project.clientName || projectState.clientName,
+          date: project.date,
+          labOrganization: projectState.labOrganization,
+          dateReported: projectState.dateReported,
+          checkedBy: projectState.checkedBy,
+          records: [record],
+        },
+      };
+
+      const jsonString = exportAsJSON(singleRecordPayload);
+      downloadJSON(jsonString, `atterberg-record-${record.label || record.title || "export"}-${new Date().toISOString().split("T")[0]}.json`);
+      toast.success("Record exported as JSON");
+
+      return true;
+    },
+    [persistedState.records, project.clientName, project.date, project.projectName, projectState.clientName, projectState.labOrganization, projectState.dateReported, projectState.checkedBy],
+  );
+
   const handleExportXLSX = useCallback(async () => {
     if (computedRecords.length === 0) {
       toast.error("No records to export");
@@ -925,6 +1021,9 @@ const AtterbergTest = () => {
                 onUpdatePlasticLimitTrials={(testId, trials) => updateTestTrials(record.id, testId, trials)}
                 onUpdateShrinkageLimitTrials={(testId, trials) => updateTestTrials(record.id, testId, trials)}
                 onSyncTest={(test) => syncComputedTest(record.id, test)}
+                onExportPDF={handleRecordExportPDF}
+                onExportXLSX={handleRecordExportXLSX}
+                onExportJSON={handleRecordExportJSON}
               />
             ))}
           </div>
@@ -984,6 +1083,9 @@ interface RecordCardProps {
   onUpdatePlasticLimitTrials: (testId: string, trials: PlasticLimitTrial[]) => void;
   onUpdateShrinkageLimitTrials: (testId: string, trials: ShrinkageLimitTrial[]) => void;
   onSyncTest: (test: AtterbergTest) => void;
+  onExportPDF: (recordId: string) => Promise<boolean>;
+  onExportXLSX: (recordId: string) => Promise<boolean>;
+  onExportJSON: (recordId: string) => boolean;
 }
 
 const RecordCard = ({
@@ -1007,8 +1109,47 @@ const RecordCard = ({
   onUpdatePlasticLimitTrials,
   onUpdateShrinkageLimitTrials,
   onSyncTest,
+  onExportPDF,
+  onExportXLSX,
+  onExportJSON,
 }: RecordCardProps) => {
   const [nextTestType, setNextTestType] = useState<AtterbergTestType>("liquidLimit");
+  const [isExporting, setIsExporting] = useState<"pdf" | "xlsx" | "json" | null>(null);
+
+  const handleExportRecordPDF = useCallback(async () => {
+    setIsExporting("pdf");
+    try {
+      await onExportPDF(record.id);
+      toast.success(`${record.title || "Record"} exported as PDF`);
+    } catch (error) {
+      console.error("Failed to export record as PDF:", error);
+      toast.error("Failed to export as PDF");
+    } finally {
+      setIsExporting(null);
+    }
+  }, [record.id, record.title, onExportPDF]);
+
+  const handleExportRecordXLSX = useCallback(async () => {
+    setIsExporting("xlsx");
+    try {
+      await onExportXLSX(record.id);
+      toast.success(`${record.title || "Record"} exported as Excel`);
+    } catch (error) {
+      console.error("Failed to export record as XLSX:", error);
+      toast.error("Failed to export as Excel");
+    } finally {
+      setIsExporting(null);
+    }
+  }, [record.id, record.title, onExportXLSX]);
+
+  const handleExportRecordJSON = useCallback(() => {
+    try {
+      onExportJSON(record.id);
+    } catch (error) {
+      console.error("Failed to export record as JSON:", error);
+      toast.error("Failed to export as JSON");
+    }
+  }, [record.id, onExportJSON]);
 
   const resultCards = [
     { label: "LL", value: record.results.liquidLimit, tone: "blue" },
@@ -1047,6 +1188,43 @@ const RecordCard = ({
                   <Button type="button" variant="outline" className="gap-2" onClick={() => onAddTest(nextTestType)}>
                     <Plus className="h-4 w-4" /> Add Test
                   </Button>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      onClick={handleExportRecordPDF}
+                      disabled={isExporting === "pdf"}
+                      title="Export this record as PDF"
+                    >
+                      <Download className="h-3 w-3" /> PDF
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      onClick={handleExportRecordXLSX}
+                      disabled={isExporting === "xlsx"}
+                      title="Export this record as Excel"
+                    >
+                      <Download className="h-3 w-3" /> Excel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      onClick={handleExportRecordJSON}
+                      disabled={isExporting === "json"}
+                      title="Export this record as JSON"
+                    >
+                      <Download className="h-3 w-3" /> JSON
+                    </Button>
+                  </div>
+
                   <Button
                     type="button"
                     variant="ghost"
