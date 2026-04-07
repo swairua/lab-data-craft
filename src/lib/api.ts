@@ -1,6 +1,8 @@
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
-export const API_BASE_URL = configuredApiBaseUrl || "https://lab.wayrus.co.ke/api.php";
+// In development, use the local proxy; in production, use the configured URL or external API
+const isDevelopment = import.meta.env.DEV;
+export const API_BASE_URL = configuredApiBaseUrl || (isDevelopment ? "/api/" : "https://lab.wayrus.co.ke/api.php");
 
 export interface ApiUser {
   id: number;
