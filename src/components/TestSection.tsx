@@ -4,8 +4,12 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, FileDown, FileSpreadsheet, FlaskConical, Loader2, Save, Sheet, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+type SmokeCheckItemStatus = "idle" | "running" | "success" | "error";
+
 type SmokeCheckStatus = {
-  state: "idle" | "running" | "success" | "error";
+  state: SmokeCheckItemStatus;
+  pdf: SmokeCheckItemStatus;
+  xlsx: SmokeCheckItemStatus;
   message: string;
   detail?: string;
 };
@@ -129,9 +133,29 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
               ) : (
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-1">
                 <div className="font-medium">{smokeCheckStatus.message}</div>
-                {smokeCheckStatus.detail && <div className="mt-0.5 text-current/80">{smokeCheckStatus.detail}</div>}
+                {smokeCheckStatus.detail && <div className="text-current/80">{smokeCheckStatus.detail}</div>}
+                <div className="grid gap-1 pt-1">
+                  {[
+                    ["PDF", smokeCheckStatus.pdf],
+                    ["Excel", smokeCheckStatus.xlsx],
+                  ].map(([label, status]) => (
+                    <div key={label} className="flex items-center gap-2">
+                      {status === "running" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : status === "success" ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : status === "error" ? (
+                        <AlertCircle className="h-3.5 w-3.5" />
+                      ) : (
+                        <div className="h-3.5 w-3.5 rounded-full border border-current/40" />
+                      )}
+                      <span className="font-medium">{label}</span>
+                      <span className="text-current/70">{status === "success" ? "complete" : status === "running" ? "running" : status === "error" ? "failed" : "idle"}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

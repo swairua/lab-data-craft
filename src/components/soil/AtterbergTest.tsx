@@ -71,6 +71,8 @@ type ComputedRecord = AtterbergRecord & {
 
 type SmokeCheckStatus = {
   state: "idle" | "running" | "success" | "error";
+  pdf: "idle" | "running" | "success" | "error";
+  xlsx: "idle" | "running" | "success" | "error";
   message: string;
   detail?: string;
 };
@@ -704,6 +706,8 @@ const AtterbergTest = () => {
     if (computedRecords.length === 0) {
       setSmokeCheckStatus({
         state: "error",
+        pdf: "idle",
+        xlsx: "idle",
         message: "Smoke check unavailable",
         detail: "Add at least one record before running the export check.",
       });
@@ -712,6 +716,8 @@ const AtterbergTest = () => {
 
     setSmokeCheckStatus({
       state: "running",
+      pdf: "running",
+      xlsx: "idle",
       message: "Running export smoke check",
       detail: "Generating the PDF and Excel downloads with the same image flow.",
     });
@@ -720,6 +726,8 @@ const AtterbergTest = () => {
     if (pdfExported === false) {
       setSmokeCheckStatus({
         state: "error",
+        pdf: "error",
+        xlsx: "idle",
         message: "Smoke check failed",
         detail: "PDF export did not complete.",
       });
@@ -728,6 +736,8 @@ const AtterbergTest = () => {
 
     setSmokeCheckStatus({
       state: "running",
+      pdf: "success",
+      xlsx: "running",
       message: "PDF export complete",
       detail: "Generating the Excel download next.",
     });
@@ -736,6 +746,8 @@ const AtterbergTest = () => {
     if (xlsxExported === false) {
       setSmokeCheckStatus({
         state: "error",
+        pdf: "success",
+        xlsx: "error",
         message: "Smoke check failed",
         detail: "Excel export did not complete.",
       });
@@ -744,6 +756,8 @@ const AtterbergTest = () => {
 
     setSmokeCheckStatus({
       state: "success",
+      pdf: "success",
+      xlsx: "success",
       message: "Smoke check complete",
       detail: "PDF and Excel downloads were generated. Verify the header images in both files.",
     });
