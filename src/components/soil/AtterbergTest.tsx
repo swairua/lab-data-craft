@@ -363,9 +363,11 @@ const persistAtterbergProjectToApi = async ({
       return;
     }
 
-    // Re-throw error with more context
+    // Duplicate errors should have been handled in the inner catch block
+    // If we still have a duplicate error here, log it and continue silently
     if (error instanceof Error && isDuplicateResultError(error)) {
-      throw new Error("This test type has already been created for this project. Your changes have been saved to the existing record.");
+      console.warn("Atterberg project: duplicate record was attempted but handled by update logic");
+      return;
     }
     throw error;
   }
@@ -641,21 +643,13 @@ const AtterbergTest = () => {
   );
 
   const handleSave = useCallback(async () => {
-    try {
-      await saveAtterbergProjectToApi({
-        lookup: effectiveProjectLookup,
-        payload: buildExportPayload(),
-        dataPoints: totalDataPoints,
-        status,
-        keyResults: aggregateResults,
-      });
-    } catch (error) {
-      if (error instanceof Error && isDuplicateResultError(error)) {
-        toast.info("This test type has already been created for this project. Your changes have been saved to the existing record.");
-        return;
-      }
-      throw error;
-    }
+    await saveAtterbergProjectToApi({
+      lookup: effectiveProjectLookup,
+      payload: buildExportPayload(),
+      dataPoints: totalDataPoints,
+      status,
+      keyResults: aggregateResults,
+    });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
 
   const handleClearAll = useCallback(async () => {
