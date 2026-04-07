@@ -1,0 +1,99 @@
+import { ReactNode, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronRight, Save, Trash2, FileDown, FileSpreadsheet, Sheet } from "lucide-react";
+import { toast } from "sonner";
+
+interface TestSectionProps {
+  title: string;
+  children: ReactNode;
+  onSave?: () => void | boolean | Promise<void | boolean>;
+  onClear?: () => void;
+  onExportPDF?: () => boolean | void | Promise<boolean | void>;
+  onExportCSV?: () => boolean | void;
+  onExportXLSX?: () => boolean | void | Promise<boolean | void>;
+}
+
+const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV, onExportXLSX }: TestSectionProps) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader
+        className="cursor-pointer select-none py-3 px-4"
+        onClick={() => setOpen(!open)}
+      >
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            {title}
+          </CardTitle>
+          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            {onExportXLSX && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const exported = await onExportXLSX();
+                  if (exported !== false) toast.success(`${title} Excel downloaded`);
+                }}
+              >
+                <Sheet className="h-3.5 w-3.5 mr-1" /> Excel
+              </Button>
+            )}
+            {onExportCSV && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const exported = onExportCSV();
+                  if (exported !== false) toast.success(`${title} CSV downloaded`);
+                }}
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> CSV
+              </Button>
+            )}
+            {onExportPDF && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const exported = onExportPDF();
+                  if (exported !== false) toast.success(`${title} PDF downloaded`);
+                }}
+              >
+                <FileDown className="h-3.5 w-3.5 mr-1" /> PDF
+              </Button>
+            )}
+            {onSave && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={async () => {
+                  try {
+                    const result = await onSave();
+                    if (result !== false) {
+                      toast.success(`${title} saved`);
+                    }
+                  } catch {
+                    toast.error(`${title} save failed`);
+                  }
+                }}
+              >
+                <Save className="h-3.5 w-3.5 mr-1" /> Save
+              </Button>
+            )}
+            {onClear && (
+              <Button size="sm" variant="outline" onClick={onClear}>
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Clear
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      {open && <CardContent className="px-4 pb-4 pt-0">{children}</CardContent>}
+    </Card>
+  );
+};
+
+export default TestSection;
