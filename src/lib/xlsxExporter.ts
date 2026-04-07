@@ -7,6 +7,7 @@ import type {
   ShrinkageLimitTrial,
 } from "@/context/TestDataContext";
 import { calculateMoistureFromMass, getTrialMoisture } from "./atterbergCalculations";
+import { fetchAdminImages } from "./imageUtils";
 
 interface ExportOptions {
   projectName?: string;
@@ -54,6 +55,9 @@ export const generateAtterbergXLSX = async (options: ExportOptions) => {
   wb.creator = "Lab Data Craft";
   wb.created = new Date();
 
+  // Fetch admin images once for all records
+  const images = await fetchAdminImages();
+
   for (const record of records) {
     const sheetName = (record.label || record.title || "Record").substring(0, 31);
     const ws = wb.addWorksheet(sheetName);
@@ -70,7 +74,59 @@ export const generateAtterbergXLSX = async (options: ExportOptions) => {
     ws.getColumn(10).width = 12;
     ws.getColumn(11).width = 12;
 
-    // Row 10: Title
+    // Set row heights for image placement
+    ws.getRow(1).height = 24;
+    ws.getRow(7).height = 24;
+
+    // Add images: logo (top left) and contacts (top right)
+    let imageStartRow = 1;
+    if (images.logo) {
+      try {
+        const logoId = wb.addImage({
+          base64: images.logo,
+          extension: "png",
+        });
+        ws.addImage(logoId, {
+          tl: { col: 0, row: 0 }, // Top-left at A1
+          ext: { width: 80, height: 24 },
+        });
+      } catch {
+        // Skip if image fails to load
+      }
+    }
+
+    if (images.contacts) {
+      try {
+        const contactsId = wb.addImage({
+          base64: images.contacts,
+          extension: "png",
+        });
+        ws.addImage(contactsId, {
+          tl: { col: 3, row: 0 }, // Top-right at D1
+          ext: { width: 80, height: 24 },
+        });
+      } catch {
+        // Skip if image fails to load
+      }
+    }
+
+    // Add stamp image below logo
+    if (images.stamp) {
+      try {
+        const stampId = wb.addImage({
+          base64: images.stamp,
+          extension: "png",
+        });
+        ws.addImage(stampId, {
+          tl: { col: 0, row: 6 }, // A7
+          ext: { width: 50, height: 24 },
+        });
+      } catch {
+        // Skip if image fails to load
+      }
+    }
+
+    // Row 10: Title (moved down to accommodate images)
     ws.mergeCells("B10:K10");
     setCell(ws, 10, 2, "ATTERBERG LIMITS (BS 1377 PART 2, 4.3 : 1990)", headerFont, allThin);
 
