@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -22,12 +22,85 @@ interface UploadedFile {
   type: ImageType;
 }
 
+interface StoredImage {
+  type: ImageType;
+  dataUrl?: string;
+  loading: boolean;
+  error?: string;
+}
+
 const Admin = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedImageType, setSelectedImageType] = useState<ImageType>("logo");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [storedImages, setStoredImages] = useState<Record<ImageType, StoredImage>>({
+    logo: { type: "logo", loading: true },
+    contacts: { type: "contacts", loading: true },
+    stamp: { type: "stamp", loading: true },
+  });
+
+  useEffect(() => {
+    const fetchStoredImages = async () => {
+      try {
+        const url = buildApiUrl({ action: "list", table: "admin_images" });
+        const resp = await fetch(url, { credentials: "include" });
+        if (!resp.ok) {
+          throw new Error("Failed to fetch images");
+        }
+        const json = await resp.json();
+        const rows: Array<{ image_type: string; file_path: string }> = json?.data || [];
+
+        // Get latest per type
+        const latest: Record<string, string> = {};
+        for (const row of rows) {
+          if (!latest[row.image_type]) {
+            latest[row.image_type] = row.file_path;
+          }
+        }
+
+        const baseUrl = new URL(buildApiUrl()).origin;
+
+        const toDataUrl = async (path: string): Promise<string | undefined> => {
+          try {
+            const imgResp = await fetch(`${baseUrl}${path}`, { credentials: "include" });
+            if (!imgResp.ok) return undefined;
+            const blob = await imgResp.blob();
+            return new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+          } catch {
+            return undefined;
+          }
+        };
+
+        // Fetch all three images in parallel
+        const [logo, contacts, stamp] = await Promise.all([
+          latest.logo ? toDataUrl(latest.logo) : Promise.resolve(undefined),
+          latest.contacts ? toDataUrl(latest.contacts) : Promise.resolve(undefined),
+          latest.stamp ? toDataUrl(latest.stamp) : Promise.resolve(undefined),
+        ]);
+
+        setStoredImages({
+          logo: { type: "logo", dataUrl: logo, loading: false },
+          contacts: { type: "contacts", dataUrl: contacts, loading: false },
+          stamp: { type: "stamp", dataUrl: stamp, loading: false },
+        });
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        setStoredImages({
+          logo: { type: "logo", loading: false, error: errorMsg },
+          contacts: { type: "contacts", loading: false, error: errorMsg },
+          stamp: { type: "stamp", loading: false, error: errorMsg },
+        });
+      }
+    };
+
+    fetchStoredImages();
+  }, []);
 
   const handleUpload = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -132,6 +205,65 @@ const Admin = () => {
 
   return (
     <div className="space-y-6">
+      {/* Images Preview Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Stored Images Preview</CardTitle>
+          <CardDescription>Currently stored lab images (Logo, Contacts, Stamp)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Logo */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Logo</h4>
+              <div className="border rounded-lg overflow-hidden bg-muted min-h-[150px] flex items-center justify-center">
+                {storedImages.logo.loading ? (
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                ) : storedImages.logo.error ? (
+                  <p className="text-xs text-muted-foreground text-center px-2">No logo uploaded</p>
+                ) : storedImages.logo.dataUrl ? (
+                  <img src={storedImages.logo.dataUrl} alt="Logo" className="h-full w-full object-contain p-2" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No logo</p>
+                )}
+              </div>
+            </div>
+
+            {/* Contacts */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Contacts</h4>
+              <div className="border rounded-lg overflow-hidden bg-muted min-h-[150px] flex items-center justify-center">
+                {storedImages.contacts.loading ? (
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                ) : storedImages.contacts.error ? (
+                  <p className="text-xs text-muted-foreground text-center px-2">No contacts uploaded</p>
+                ) : storedImages.contacts.dataUrl ? (
+                  <img src={storedImages.contacts.dataUrl} alt="Contacts" className="h-full w-full object-contain p-2" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No contacts</p>
+                )}
+              </div>
+            </div>
+
+            {/* Stamp */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Stamp</h4>
+              <div className="border rounded-lg overflow-hidden bg-muted min-h-[150px] flex items-center justify-center">
+                {storedImages.stamp.loading ? (
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                ) : storedImages.stamp.error ? (
+                  <p className="text-xs text-muted-foreground text-center px-2">No stamp uploaded</p>
+                ) : storedImages.stamp.dataUrl ? (
+                  <img src={storedImages.stamp.dataUrl} alt="Stamp" className="h-full w-full object-contain p-2" />
+                ) : (
+                  <p className="text-xs text-muted-foreground">No stamp</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Image Upload</CardTitle>
