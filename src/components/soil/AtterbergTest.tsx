@@ -305,6 +305,19 @@ const persistAtterbergProjectToApi = async ({
       payload_json: payload,
     };
 
+    // Clean up any duplicate records first (keep only the most recent one)
+    if (matchingResults.length > 1) {
+      const sortedByMostRecent = [...matchingResults].sort((a, b) => b.id - a.id);
+
+      // Delete all but the first (most recent by ID)
+      await Promise.allSettled(
+        sortedByMostRecent.slice(1).map((row) => deleteApiRecord("test_results", row.id))
+      );
+
+      // Keep only the most recent for update
+      matchingResults = [sortedByMostRecent[0]];
+    }
+
     if (matchingResults[0]) {
       await updateApiRecord("test_results", matchingResults[0].id, resultPayload);
     } else {
@@ -315,6 +328,7 @@ const persistAtterbergProjectToApi = async ({
           throw error;
         }
 
+        // Duplicate error: refetch and try to update the existing record
         const latestResultsResponse = await listRecords<ApiAtterbergResultRow>("test_results", {
           limit: 1000,
           orderBy: "updated_at",
@@ -326,12 +340,19 @@ const persistAtterbergProjectToApi = async ({
           throw error;
         }
 
+        // If there are multiple duplicates, delete the extras
+        if (matchingResults.length > 1) {
+          const sortedByMostRecent = [...matchingResults].sort((a, b) => b.id - a.id);
+
+          await Promise.allSettled(
+            sortedByMostRecent.slice(1).map((row) => deleteApiRecord("test_results", row.id))
+          );
+
+          matchingResults = [sortedByMostRecent[0]];
+        }
+
         await updateApiRecord("test_results", matchingResults[0].id, resultPayload);
       }
-    }
-
-    if (matchingResults.length > 1) {
-      await Promise.allSettled(matchingResults.slice(1).map((row) => deleteApiRecord("test_results", row.id)));
     }
   } catch (error) {
     // If auth fails, silently continue (auto-save is non-critical)
