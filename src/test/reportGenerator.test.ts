@@ -39,30 +39,50 @@ vi.mock("jspdf-autotable", () => ({
   default: autoTable,
 }));
 
-import { generateDashboardReport } from "@/lib/reportGenerator";
+import { generateDashboardReport, generateProjectSummaryReport } from "@/lib/reportGenerator";
 
-describe("generateDashboardReport", () => {
+describe("reportGenerator PDF exports", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("uses the autoTable helper instead of doc.autoTable", () => {
+  const project = {
+    projectName: "Project A",
+    clientName: "Client A",
+    date: "2024-06-01",
+  };
+
+  it("uses the autoTable helper for the dashboard export", () => {
     expect(() =>
-      generateDashboardReport(
-        { projectName: "Project A", clientName: "Client A", date: "2024-06-01" },
-        {
-          "soil-1": {
-            name: "Atterberg Limits",
-            category: "soil",
-            status: "completed",
-            dataPoints: 3,
-            keyResults: [{ label: "LL", value: "42" }],
-          },
+      generateDashboardReport(project, {
+        "soil-1": {
+          name: "Atterberg Limits",
+          category: "soil",
+          status: "completed",
+          dataPoints: 3,
+          keyResults: [{ label: "LL", value: "42" }],
         },
-      ),
+      }),
     ).not.toThrow();
 
     expect(autoTable).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith("Dashboard_Export.pdf");
+  });
+
+  it("uses the autoTable helper for the project summary export", () => {
+    expect(() =>
+      generateProjectSummaryReport(project, {
+        "soil-1": {
+          name: "Atterberg Limits",
+          category: "soil",
+          status: "completed",
+          dataPoints: 3,
+          keyResults: [{ label: "LL", value: "42" }],
+        },
+      }),
+    ).not.toThrow();
+
+    expect(autoTable).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith("Project_Summary_Report.pdf");
   });
 });
