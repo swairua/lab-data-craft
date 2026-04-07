@@ -8,7 +8,7 @@ import type {
   ShrinkageLimitTrial,
 } from "@/context/TestDataContext";
 import { calculateMoistureFromMass } from "./atterbergCalculations";
-import { buildApiUrl } from "./api";
+import { fetchAdminImages, type AdminImages } from "./imageUtils";
 
 interface AtterbergPDFOptions {
   projectName?: string;
@@ -16,12 +16,6 @@ interface AtterbergPDFOptions {
   date?: string;
   projectState: AtterbergProjectState;
   records: AtterbergRecord[];
-}
-
-interface AdminImages {
-  logo?: string; // base64 data URL
-  contacts?: string;
-  stamp?: string;
 }
 
 const COLORS = {
@@ -42,69 +36,6 @@ const num = (v: string | undefined): number | null => {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const fmt = (v: number | string | null | undefined): string =>
   v === null || v === undefined ? "-" : typeof v === "number" ? String(round2(v)) : v;
-
-// ── Fetch admin images from API ──
-async function fetchAdminImages(): Promise<AdminImages> {
-  const images: AdminImages = {};
-  try {
-    const url = buildApiUrl({ action: "list", table: "admin_images" });
-    const resp = await fetch(url, { credentials: "include" });
-    if (!resp.ok) return images;
-    const json = await resp.json();
-    const rows: Array<{ image_type: string; file_path: string }> = json?.data || [];
-
-    // Get latest per type
-    const latest: Record<string, string> = {};
-    for (const row of rows) {
-      if (!latest[row.image_type]) {
-        latest[row.image_type] = row.file_path;
-      }
-    }
-
-    const baseUrl = new URL(buildApiUrl()).origin;
-
-    const toDataUrl = async (path: string): Promise<string | undefined> => {
-      try {
-        const imgResp = await fetch(`${baseUrl}${path}`, { credentials: "include" });
-        if (!imgResp.ok) return undefined;
-        const blob = await imgResp.blob();
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      } catch {
-        return undefined;
-      }
-    };
-
-    const [logo, contacts, stamp] = await Promise.all([
-      latest.logo ? toDataUrl(latest.logo) : Promise.resolve(undefined),
-      latest.contacts ? toDataUrl(latest.contacts) : Promise.resolve(undefined),
-      latest.stamp ? toDataUrl(latest.stamp) : Promise.resolve(undefined),
-    ]);
-
-    images.logo = logo;
-    images.contacts = contacts;
-    images.stamp = stamp;
-  } catch {
-    // Silently fail – images are optional
-  }
-  return images;
-}
-
-// ── Get image dimensions maintaining aspect ratio ──
-function fitImage(
-  dataUrl: string,
-  maxW: number,
-  maxH: number,
-): { w: number; h: number } {
-  // Create a temporary image to get natural dimensions
-  // jsPDF can figure it out from the data URL, but we need aspect ratio
-  // Use a simple heuristic: assume roughly 3:1 for wide logos, 1:1 for stamps
-  // We'll use jsPDF's getImageProperties for accuracy
-  return { w: maxW, h: maxH };
-}
 
 // ── Draw the cone penetration / moisture graph (BS 1377 style) ──
 function drawConeGraph(
