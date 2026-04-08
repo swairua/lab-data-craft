@@ -315,65 +315,95 @@ function drawRecordPage(
   let y = 10;
 
   // ── Header images: logo (left) + contacts (right) ──
-  const headerH = 24;
-  if (images.logo || images.contacts) {
+  // Use consistent sizing to match XLSX proportions (fixed width for visual consistency)
+  const headerImageW = 55; // Fixed width for logo/contacts (matches XLSX visual ratio)
+  const headerImageH = 18; // Adjusted height to match aspect ratio
+
+  if (images.logo || images.contacts || images.stamp) {
     if (images.logo) {
       try {
-        doc.addImage(images.logo, margin, y, contentW * 0.35, headerH);
+        doc.addImage(images.logo, margin, y, headerImageW, headerImageH);
       } catch { /* skip */ }
     }
     if (images.contacts) {
       try {
-        const contactsW = contentW * 0.35;
-        doc.addImage(images.contacts, pw - margin - contactsW, y, contactsW, headerH);
+        doc.addImage(images.contacts, pw - margin - headerImageW, y, headerImageW, headerImageH);
       } catch { /* skip */ }
     }
-    y += headerH + 3;
+    if (images.stamp) {
+      try {
+        const stampW = 35; // Stamp is smaller (50 pixels vs 80 pixels in XLSX)
+        const stampH = 14;
+        doc.addImage(images.stamp, margin, y + headerImageH + 2, stampW, stampH);
+      } catch { /* skip */ }
+    }
+    y += headerImageH + 5;
   }
 
   // ── Title bar ──
   doc.setFillColor(...COLORS.primary);
-  doc.roundedRect(margin, y, contentW, 12, 2, 2, "F");
+  doc.rect(margin, y, contentW, 10, "F");
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(255, 255, 255);
-  doc.text("ATTERBERG LIMITS (BS 1377 PART 2, 4.3 : 1990)", pw / 2, y + 8, { align: "center" });
-  y += 16;
+  doc.text("ATTERBERG LIMITS (BS 1377 PART 2, 4.3 : 1990)", pw / 2, y + 6.5, { align: "center" });
+  y += 12;
 
-  // ── Metadata section ──
-  const metaRows = [
-    [{ label: "Client name:", value: clientName || projectState.clientName || "-" }],
-    [{ label: "Project/Site name:", value: projectName || projectState.projectName || "-" }],
+  // ── Metadata section - Use table-like layout matching XLSX ──
+  const metadataData = [
+    ["Client name:", clientName || projectState.clientName || "", "", "", "", ""],
+    ["Project/Site name:", projectName || projectState.projectName || "", "", "", "", ""],
     [
-      { label: "Sampled by:", value: projectState.labOrganization || "-" },
-      { label: "Date submitted:", value: record.dateSubmitted || "-" },
-      { label: "Date tested:", value: record.dateTested || "-" },
+      "Sampled and submitted by:",
+      projectState.labOrganization || "",
+      "Date submitted:",
+      record.dateSubmitted || "",
+      "Date tested:",
+      record.dateTested || "",
     ],
     [
-      { label: "Sample ID:", value: record.label || "-" },
-      { label: "Sample depth:", value: (record as any).sampleDepth || "-" },
-      { label: "Sample No:", value: record.sampleNumber || "-" },
+      "Sample ID:",
+      record.label || "",
+      "Sample depth (M):",
+      "",
+      "Sample No:",
+      record.sampleNumber || "-",
     ],
   ];
 
-  doc.setFontSize(7.5);
-  for (const row of metaRows) {
-    const colW = contentW / row.length;
-    row.forEach((item, i) => {
-      const x = margin + i * colW;
+  const metaColWs = [35, 30, 30, 25, 30, 25]; // Column widths for metadata
+  const metaLabelFont = { size: 7.5, name: "helvetica", bold: true };
+  const metaValueFont = { size: 7.5, name: "helvetica" };
+
+  for (const row of metadataData) {
+    let x = margin;
+    for (let i = 0; i < row.length; i += 2) {
+      const label = row[i] || "";
+      const value = row[i + 1] || "";
+      const cellW = (metaColWs[i] + metaColWs[i + 1]) / 2;
+
+      // Draw label
+      doc.setFontSize(7);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(...COLORS.primary);
-      doc.text(item.label, x + 2, y + 4);
+      doc.text(label, x + 2, y + 3.5);
+
+      // Draw value
       doc.setFont("helvetica", "normal");
       doc.setTextColor(...COLORS.dark);
-      doc.text(item.value, x + 2, y + 8.5);
+      doc.text(value, x + 2, y + 7);
+
+      // Draw border
       doc.setDrawColor(...COLORS.border);
-      doc.rect(x, y, colW, 11);
-    });
-    y += 11;
+      doc.setLineWidth(0.3);
+      doc.rect(x, y, cellW * 2, 8);
+
+      x += cellW * 2;
+    }
+    y += 9;
   }
 
-  y += 3;
+  y += 2;
 
   // ── Find tests ──
   const llTest = record.tests.find((t) => t.type === "liquidLimit");
@@ -453,8 +483,17 @@ function drawRecordPage(
     return row;
   });
 
-  const firstColW = 36;
+  const firstColW = 38;
   const dataColW = (contentW - firstColW) / (colHeaders.length - 1);
+
+  // Build column styles for consistent widths (matching XLSX structure)
+  const columnStyles: Record<number, any> = {
+    0: { cellWidth: firstColW, halign: "left", fontStyle: "bold", fontSize: 7 },
+  };
+  // Set equal widths for all data columns
+  for (let i = 1; i < colHeaders.length; i++) {
+    columnStyles[i] = { cellWidth: dataColW, halign: "center", fontSize: 6.5 };
+  }
 
   autoTable(doc, {
     startY: y,
@@ -466,16 +505,16 @@ function drawRecordPage(
       textColor: COLORS.dark,
       fontStyle: "bold",
       fontSize: 6.5,
-      cellPadding: 1.5,
+      cellPadding: 2,
       halign: "center",
+      lineWidth: 0.3,
+      lineColor: COLORS.border,
     },
-    bodyStyles: { fontSize: 7, cellPadding: 1.5, halign: "center" },
-    columnStyles: {
-      0: { cellWidth: firstColW, halign: "left", fontStyle: "bold", fontSize: 7 },
-    },
+    bodyStyles: { fontSize: 6.5, cellPadding: 2, halign: "center", lineColor: COLORS.border, lineWidth: 0.3 },
+    columnStyles,
     alternateRowStyles: { fillColor: COLORS.lightBg },
     margin: { left: margin, right: margin },
-    styles: { overflow: "linebreak" as const, lineColor: COLORS.border, lineWidth: 0.3 },
+    styles: { overflow: "linebreak" as const, font: "helvetica" },
     didParseCell: (data: any) => {
       if (data.section === "body" && data.row.index === 7) {
         data.cell.styles.fontStyle = "bold";
@@ -499,23 +538,24 @@ function drawRecordPage(
   y += 9;
 
   // ── Layout: Left side = charts, Right side = LS + Results + Classification ──
+  // Use fixed proportions to match XLSX printed width ratios
   const leftW = contentW * 0.48;
-  const rightW = contentW * 0.5;
-  const rightX = margin + contentW * 0.5;
+  const rightW = contentW * 0.48;
+  const rightX = margin + leftW + 4;
   const sectionStartY = y;
 
   // ── LEFT: Cone Graph ──
-  const chartH = 50;
+  const chartH = 48; // Fixed height for consistent aspect ratio
   drawConeGraph(doc, llTrials, record.results.liquidLimit, margin, y, leftW, chartH);
 
   // ── LEFT: Plasticity Chart below cone graph ──
-  const plasticityChartH = 50;
+  const plasticityChartH = 48; // Match cone graph height
   drawPlasticityChart(
     doc,
     record.results.liquidLimit,
     record.results.plasticityIndex,
     margin,
-    y + chartH + 4,
+    y + chartH + 3,
     leftW,
     plasticityChartH,
   );
@@ -641,17 +681,6 @@ function drawRecordPage(
   doc.text(`Tested by: ${record.testedBy || "____________"}`, margin, footerY);
   doc.text(`Date reported: ${projectState.dateReported || "____________"}`, margin + contentW * 0.35, footerY);
   doc.text(`Checked by: ${projectState.checkedBy || "____________"}`, margin + contentW * 0.7, footerY);
-
-  // ── Stamp image at bottom ──
-  if (images.stamp) {
-    try {
-      const stampW = 35;
-      const stampH = 35;
-      const stampX = pw - margin - stampW;
-      const stampY = ph - margin - stampH - 8;
-      doc.addImage(images.stamp, stampX, stampY, stampW, stampH);
-    } catch { /* skip */ }
-  }
 }
 
 export const generateAtterbergPDF = async (options: AtterbergPDFOptions) => {
