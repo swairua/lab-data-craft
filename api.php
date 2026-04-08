@@ -101,8 +101,8 @@ function getCurrentUser(mysqli $conn): ?array
         return null;
     }
 
-    // Update session expiration (sliding expiration: 30 days)
-    $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
+    // Update session expiration (sliding expiration: 30 minutes)
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+30 minutes'));
     $updateStmt = $conn->prepare("UPDATE `sessions` SET `expires_at` = ?, `updated_at` = NOW() WHERE `session_id` = ?");
     if ($updateStmt) {
         $updateStmt->bind_param('ss', $expiresAt, $sessionId);
