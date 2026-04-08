@@ -45,6 +45,33 @@ const getApiBaseUrl = (): string => {
 
 export const API_BASE_URL = getApiBaseUrl();
 
+// Token management for cross-origin authentication
+const TOKEN_STORAGE_KEY = 'lab_data_craft_auth_token';
+
+export const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setAuthToken = (token: string): void => {
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Fail silently if localStorage is unavailable
+  }
+};
+
+export const clearAuthToken = (): void => {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // Fail silently if localStorage is unavailable
+  }
+};
+
 export interface ApiUser {
   id: number;
   email: string;
@@ -54,6 +81,7 @@ export interface ApiUser {
 interface LoginResponse {
   message: string;
   user_id: number;
+  token: string;
   user: ApiUser;
 }
 
@@ -91,6 +119,12 @@ export const apiRequest = async <T>(
 
   if (init?.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  // Add Authorization header with token if available
+  const token = getAuthToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
   const url = buildApiUrl(params);

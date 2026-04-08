@@ -12,6 +12,7 @@ $allowed_origins = [
     'http://localhost:5173',
     'http://localhost:8080',
 ];
+
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 // Allow any Lovable preview subdomain
 $isLovablePreview = (bool) preg_match('/^https:\/\/[a-z0-9\-]+\.lovable\.app$/', $origin);
