@@ -37,15 +37,9 @@ const getApiBaseUrl = (): string => {
     return configuredApiBaseUrl;
   }
 
-  if (isDevelopment) {
-    // In development, use the local proxy via relative path
-    // This will use the current window's origin
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/api/`;
-    }
-    return "/api/";
-  }
-
+  // Always use the direct API URL to avoid proxy cookie handling issues
+  // The proxy through localhost can cause session cookies to not be properly transmitted
+  // due to SameSite restrictions and origin header changes
   return "https://lab.wayrus.co.ke/api.php";
 };
 
@@ -99,9 +93,10 @@ export const apiRequest = async <T>(
     headers.set("Content-Type", "application/json");
   }
 
+  const url = buildApiUrl(params);
   let response: Response;
   try {
-    response = await fetch(buildApiUrl(params), {
+    response = await fetch(url, {
       credentials: "include",
       ...init,
       headers,
@@ -109,12 +104,21 @@ export const apiRequest = async <T>(
   } catch (error) {
     // Network error (no connection, timeout, etc.)
     const message = error instanceof Error ? error.message : "Network request failed";
+    console.debug("API Network Error:", { url, message, params });
     throw new NetworkError(`Network error: ${message}`);
   }
 
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    console.debug("API Error Response:", {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      data,
+      params,
+    });
+
     // Handle 401/403 auth errors
     if (response.status === 401 || response.status === 403) {
       throw new AuthError(
