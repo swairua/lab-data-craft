@@ -100,7 +100,7 @@ const Index = ({ initialTab }: IndexProps) => {
     };
   }, []);
 
-  // Periodically check if session is still valid (every 5 minutes)
+  // Periodically check if session is still valid (every 30 minutes)
   // This detects when the backend session expires and resets auth state
   useEffect(() => {
     if (authStatus !== "authenticated") return;
@@ -114,7 +114,7 @@ const Index = ({ initialTab }: IndexProps) => {
         setAuthStatus("unauthenticated");
         toast.info("Your session has expired. Please log in again.");
       }
-    }, 5 * 60 * 1000); // Check every 5 minutes
+    }, 30 * 60 * 1000); // Check every 30 minutes
 
     return () => clearInterval(sessionCheckInterval);
   }, [authStatus]);
