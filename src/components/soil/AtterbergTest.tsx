@@ -50,6 +50,7 @@ import { useTestReport } from "@/hooks/useTestReport";
 import {
   createRecord as createApiRecord,
   deleteRecord as deleteApiRecord,
+  isAuthApiError,
   listRecords,
   updateRecord as updateApiRecord,
 } from "@/lib/api";
@@ -221,12 +222,15 @@ const isDuplicateResultError = (error: unknown) => {
   if (!(error instanceof Error)) return false;
   // Match various duplicate/unique constraint error messages
   // But exclude auth errors which might contain "unique" in the context
-  if (error.message.includes("Unauthorized") || error.message.includes("Forbidden")) {
+  if (isAuthApiError(error)) {
     return false;
   }
   return /duplicate|unique|uq_test_results/i.test(error.message) ||
          /entry.*for key/i.test(error.message);
 };
+
+const isNetworkFailureError = (error: unknown) =>
+  error instanceof TypeError || (error instanceof Error && /Failed to fetch|NetworkError|Load failed/i.test(error.message));
 
 const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
   try {
@@ -249,7 +253,7 @@ const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
     return normalizeAtterbergProjectState(extractAtterbergPayload(resultRow.payload_json));
   } catch (error) {
     // If API is unavailable or unauthorized, return null to allow fallback to localStorage
-    if (error instanceof Error && (error.message.includes("Unauthorized") || error.message.includes("Forbidden"))) {
+    if (isAuthApiError(error)) {
       console.warn("API authentication failed, using localStorage fallback");
       return null;
     }
@@ -263,12 +267,14 @@ const persistAtterbergProjectToApi = async ({
   dataPoints,
   status,
   keyResults,
+  silent = false,
 }: {
   lookup: AtterbergProjectLookup;
   payload: AtterbergExportPayload;
   dataPoints: number;
   status: string;
   keyResults: Array<{ label: string; value: string }>;
+  silent?: boolean;
 }) => {
   try {
     const [projectsResponse, resultsResponse] = await Promise.all([
@@ -313,9 +319,7 @@ const persistAtterbergProjectToApi = async ({
         // Create a unique test_key for each test: "atterberg-{testId}"
         const testKey = `atterberg-${test.id}`;
 
-        // Show progress for each test being saved
-        const progressMessage = `Saving test ${testSaveCount + 1} of ${totalTestCount}...`;
-        const toastId = toast.loading(progressMessage);
+        const toastId = silent ? undefined : toast.loading(`Saving test ${testSaveCount + 1} of ${totalTestCount}...`);
 
         try {
           const resultPayload = {
@@ -337,15 +341,21 @@ const persistAtterbergProjectToApi = async ({
           if (existingTestResult) {
             // Update existing test row
             await updateApiRecord("test_results", existingTestResult.id, resultPayload);
-            toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+            if (!silent && toastId) {
+              toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+            }
           } else {
             // Create new test row
             await createApiRecord("test_results", resultPayload);
-            toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+            if (!silent && toastId) {
+              toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+            }
           }
           testSaveCount++;
         } catch (testError) {
-          toast.error(`Failed to save test ${testSaveCount + 1}`, { id: toastId });
+          if (!silent && toastId) {
+            toast.error(`Failed to save test ${testSaveCount + 1}`, { id: toastId });
+          }
           throw testError;
         }
       }
@@ -353,7 +363,7 @@ const persistAtterbergProjectToApi = async ({
 
     // If no tests were saved, create a placeholder row to mark project as updated
     if (totalTestCount === 0) {
-      const toastId = toast.loading("Saving project...");
+      const toastId = silent ? undefined : toast.loading("Saving project...");
       try {
         const resultPayload = {
           project_id: projectRow.id,
@@ -375,28 +385,29 @@ const persistAtterbergProjectToApi = async ({
         } else {
           await createApiRecord("test_results", resultPayload);
         }
-        toast.success("Project saved", { id: toastId });
+        if (!silent && toastId) {
+          toast.success("Project saved", { id: toastId });
+        }
       } catch (error) {
-        toast.error("Failed to save project", { id: toastId });
+        if (!silent && toastId) {
+          toast.error("Failed to save project", { id: toastId });
+        }
         throw error;
       }
     }
   } catch (error) {
-    // If auth fails, silently continue (auto-save is non-critical)
-    // Check for various auth error patterns
-    const isAuthError = error instanceof Error && (
-      error.message.includes("Unauthorized") ||
-      error.message.includes("Forbidden") ||
-      error.message.includes("Session expired") ||
-      error.message.includes("access denied")
-    );
-
-    if (isAuthError) {
+    if (isAuthApiError(error)) {
       console.warn("API save skipped due to authentication, data is preserved locally");
       return;
     }
 
-    // Log and continue for other errors to allow local fallback
+    if (silent || isNetworkFailureError(error)) {
+      if (error instanceof Error) {
+        console.warn("Atterberg project save skipped:", error.message);
+      }
+      return;
+    }
+
     if (error instanceof Error) {
       console.error("Failed to save Atterberg tests:", error.message);
     }
@@ -410,6 +421,7 @@ const saveAtterbergProjectToApi = (args: {
   dataPoints: number;
   status: string;
   keyResults: Array<{ label: string; value: string }>;
+  silent?: boolean;
 }) => {
   const queuedSave = atterbergSaveQueue.then(() => persistAtterbergProjectToApi(args), () => persistAtterbergProjectToApi(args));
   atterbergSaveQueue = queuedSave.then(() => undefined, () => undefined);
@@ -565,12 +577,29 @@ const AtterbergTest = () => {
       return;
     }
 
+    try {
+      const serializedState = JSON.stringify(projectState);
+      localStorage.setItem(STORAGE_KEY, serializedState);
+      localStorage.setItem("enhancedAtterbergTests", serializedState);
+    } catch (error) {
+      console.error("Failed to persist Atterberg project locally:", error);
+    }
+  }, [projectState]);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+
     void saveAtterbergProjectToApi({
       lookup: effectiveProjectLookup,
       payload: buildExportPayload(),
       dataPoints: totalDataPoints,
       status,
       keyResults: aggregateResults,
+      silent: true,
     }).catch((error) => {
       // Silently ignore duplicate errors in auto-save since they indicate the record was already created
       // and the error handler in persistAtterbergProjectToApi will handle the update
@@ -578,15 +607,8 @@ const AtterbergTest = () => {
         console.debug("Atterberg project auto-save: handled duplicate record");
         return;
       }
-      // Only log real errors, not duplicate errors (auth errors are silently handled)
-      if (error instanceof Error) {
-        const isAuthError = error.message.includes("Unauthorized") ||
-                          error.message.includes("Forbidden") ||
-                          error.message.includes("Session expired") ||
-                          error.message.includes("access denied");
-        if (!isAuthError) {
-          console.error("Failed to save Atterberg project to API:", error.message);
-        }
+      if (error instanceof Error && !isAuthApiError(error)) {
+        console.error("Failed to save Atterberg project to API:", error.message);
       }
     });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);

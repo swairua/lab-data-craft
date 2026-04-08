@@ -99,13 +99,19 @@ export const loginUser = (email: string, password: string) =>
     { action: "login" },
   );
 
+export const isAuthApiError = (error: unknown) =>
+  error instanceof Error && (error.message.startsWith("Unauthorized:") || error.message.includes("Forbidden"));
+
 export const fetchCurrentUser = async () => {
   try {
     const response = await apiRequest<CurrentUserResponse>(undefined, { action: "me" });
     return response.user;
   } catch (error) {
-    // API unavailable, not authenticated, or network error - return null gracefully
-    return null;
+    if (isAuthApiError(error)) {
+      return null;
+    }
+
+    throw error;
   }
 };
 
