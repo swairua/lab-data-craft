@@ -11,8 +11,11 @@ type AdminImageRow = { image_type: string; file_path: string };
 type AdminImagePaths = Partial<Record<AdminImageType, string>>;
 
 const getAdminImageUrl = (path: string) => {
-  const apiUrl = new URL(buildApiUrl());
-  return new URL(path, apiUrl.origin).toString();
+  if (path.startsWith('http')) {
+    return path; // Already a full URL
+  }
+  // Use the external API origin for image paths
+  return `https://lab.wayrus.co.ke${path}`;
 };
 
 const listAdminImagePaths = async (): Promise<AdminImagePaths> => {
