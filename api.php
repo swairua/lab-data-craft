@@ -75,12 +75,20 @@ function verifyPassword(string $password, string $hash): bool
 
 function getCurrentUser(mysqli $conn): ?array
 {
-    if (!isset($_SESSION['user_id'])) {
-        return null;
+    $sessionId = null;
+    $userId = null;
+
+    // First, check for Authorization header token (for cross-origin requests)
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if ($authHeader && preg_match('/^Bearer\s+(.+)$/i', $authHeader, $matches)) {
+        $sessionId = $matches[1];
     }
 
-    $userId = (int) $_SESSION['user_id'];
-    $sessionId = $_SESSION['session_id'] ?? null;
+    // Fall back to session cookie if no Authorization header
+    if (!$sessionId && isset($_SESSION['user_id'])) {
+        $userId = (int) $_SESSION['user_id'];
+        $sessionId = $_SESSION['session_id'] ?? null;
+    }
 
     if (!$sessionId) {
         return null;
@@ -370,6 +378,7 @@ try {
         respond([
             'message' => 'Logged in successfully',
             'user_id' => $userId,
+            'token' => $sessionId,
             'user' => [
                 'id' => $userId,
                 'email' => $userRow['email'],

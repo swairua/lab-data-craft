@@ -52,6 +52,8 @@ import {
   type ApiUser,
   isAuthApiError,
   isNetworkError,
+  setAuthToken,
+  clearAuthToken,
 } from "@/lib/api";
 import { updateSaveManagerAuthVersion } from "@/components/soil/AtterbergTest";
 
@@ -233,6 +235,7 @@ const Index = ({ initialTab }: IndexProps) => {
 
     try {
       const response = await loginUser(nextEmail, password);
+      setAuthToken(response.token);
       setCurrentUser(response.user);
       setAuthStatus("authenticated");
       setEmail(nextEmail);
@@ -276,6 +279,7 @@ const Index = ({ initialTab }: IndexProps) => {
         toast.error("Failed to end the remote session");
       }
     } finally {
+      clearAuthToken();
       setCurrentUser(null);
       setPassword("");
       setAuthStatus("unauthenticated");
