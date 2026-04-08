@@ -25,10 +25,30 @@ interface TestSectionProps {
   onExportSmokeCheck?: () => boolean | void | Promise<boolean | void>;
   exportSmokeCheckDisabled?: boolean;
   smokeCheckStatus?: SmokeCheckStatus | null;
+  saveStatus?: "idle" | "saving" | "success" | "pending-retry" | "awaiting-auth" | "failed" | null;
 }
 
-const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV, onExportXLSX, onExportSmokeCheck, exportSmokeCheckDisabled, smokeCheckStatus }: TestSectionProps) => {
+const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCSV, onExportXLSX, onExportSmokeCheck, exportSmokeCheckDisabled, smokeCheckStatus, saveStatus }: TestSectionProps) => {
   const [open, setOpen] = useState(false);
+
+  const getSaveStatusDisplay = () => {
+    switch (saveStatus) {
+      case "success":
+        return { icon: <CheckCircle2 className="h-3.5 w-3.5" />, text: "Saved to server", color: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+      case "saving":
+        return { icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />, text: "Saving...", color: "border-blue-200 bg-blue-50 text-blue-800" };
+      case "pending-retry":
+        return { icon: <AlertCircle className="h-3.5 w-3.5" />, text: "Will retry save", color: "border-yellow-200 bg-yellow-50 text-yellow-800" };
+      case "awaiting-auth":
+        return { icon: <AlertCircle className="h-3.5 w-3.5" />, text: "Login required to save", color: "border-red-200 bg-red-50 text-red-800" };
+      case "failed":
+        return { icon: <AlertCircle className="h-3.5 w-3.5" />, text: "Save failed (data safe locally)", color: "border-red-200 bg-red-50 text-red-800" };
+      default:
+        return null;
+    }
+  };
+
+  const saveStatusDisplay = getSaveStatusDisplay();
 
   return (
     <Card className="shadow-sm">
@@ -119,6 +139,14 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
             )}
           </div>
         </div>
+        {saveStatusDisplay && (
+          <div className={`mt-3 rounded-md border px-3 py-2 text-xs ${saveStatusDisplay.color}`}>
+            <div className="flex items-center gap-2">
+              {saveStatusDisplay.icon}
+              <span className="font-medium">{saveStatusDisplay.text}</span>
+            </div>
+          </div>
+        )}
         {smokeCheckStatus && smokeCheckStatus.state !== "idle" && (
           <div
             className={`mt-3 rounded-md border px-3 py-2 text-xs ${

@@ -45,13 +45,20 @@ import DCPTest from "@/components/special/DCPTest";
 import Dashboard from "@/pages/Dashboard";
 import Reports from "@/pages/Reports";
 import Admin from "@/pages/Admin";
-import { fetchCurrentUser, loginUser, logoutUser, type ApiUser } from "@/lib/api";
+import {
+  fetchCurrentUser,
+  loginUser,
+  logoutUser,
+  type ApiUser,
+  isAuthApiError,
+  isNetworkError,
+} from "@/lib/api";
 
 interface IndexProps {
   initialTab?: string;
 }
 
-type AuthStatus = "checking" | "authenticated" | "unauthenticated";
+type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "expired";
 
 const Index = ({ initialTab }: IndexProps) => {
   const location = useLocation();
@@ -67,6 +74,7 @@ const Index = ({ initialTab }: IndexProps) => {
   const [showAdvancedMetadata, setShowAdvancedMetadata] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null);
+  const [lastAuthError, setLastAuthError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
@@ -80,16 +88,37 @@ const Index = ({ initialTab }: IndexProps) => {
     let isMounted = true;
 
     const restoreSession = async () => {
-      const user = await fetchCurrentUser();
+      try {
+        const user = await fetchCurrentUser();
 
-      if (!isMounted) return;
+        if (!isMounted) return;
 
-      if (user) {
-        setCurrentUser(user);
-        setAuthStatus("authenticated");
-      } else {
-        setCurrentUser(null);
-        setAuthStatus("unauthenticated");
+        if (user) {
+          setCurrentUser(user);
+          setAuthStatus("authenticated");
+          setLastAuthError(null);
+        } else {
+          setCurrentUser(null);
+          setAuthStatus("unauthenticated");
+        }
+      } catch (error) {
+        if (!isMounted) return;
+
+        // Auth errors on mount mean session is not valid
+        if (isAuthApiError(error)) {
+          setCurrentUser(null);
+          setAuthStatus("unauthenticated");
+          setLastAuthError(null);
+        } else if (isNetworkError(error)) {
+          // Network errors on mount - try again soon
+          console.warn("Session restore: network error, will retry");
+          setAuthStatus("unauthenticated");
+        } else {
+          // Other errors - log but treat as unauthenticated
+          console.error("Session restore error:", error);
+          setCurrentUser(null);
+          setAuthStatus("unauthenticated");
+        }
       }
     };
 
@@ -106,13 +135,28 @@ const Index = ({ initialTab }: IndexProps) => {
     if (authStatus !== "authenticated") return;
 
     const sessionCheckInterval = setInterval(async () => {
-      const user = await fetchCurrentUser();
-
-      if (!user) {
-        // Session has expired
-        setCurrentUser(null);
-        setAuthStatus("unauthenticated");
-        toast.info("Your session has expired. Please log in again.");
+      try {
+        const user = await fetchCurrentUser();
+        if (!user) {
+          // Session has expired
+          setCurrentUser(null);
+          setAuthStatus("expired");
+          setLastAuthError("Your session has expired. Please log in again.");
+          toast.info("Your session has expired. Please log in again.");
+        }
+      } catch (error) {
+        // Network errors during session check shouldn't immediately mark as expired
+        if (isNetworkError(error)) {
+          console.debug("Session check: network error, will retry later");
+          return;
+        }
+        // Auth errors mean session is no longer valid
+        if (isAuthApiError(error)) {
+          setCurrentUser(null);
+          setAuthStatus("expired");
+          setLastAuthError("Your session has expired. Please log in again.");
+          toast.info("Your session has expired. Please log in again.");
+        }
       }
     }, 30 * 60 * 1000); // Check every 30 minutes
 
@@ -143,6 +187,7 @@ const Index = ({ initialTab }: IndexProps) => {
     }
 
     setIsSubmittingLogin(true);
+    setLastAuthError(null);
 
     try {
       const response = await loginUser(nextEmail, password);
@@ -150,11 +195,25 @@ const Index = ({ initialTab }: IndexProps) => {
       setAuthStatus("authenticated");
       setEmail(nextEmail);
       setPassword("");
+      setLastAuthError(null);
       toast.success(`Signed in as ${response.user.name}`);
     } catch (error) {
       setCurrentUser(null);
       setAuthStatus("unauthenticated");
-      toast.error(error instanceof Error ? error.message : "Login failed");
+
+      let errorMessage = "Login failed";
+      if (isAuthApiError(error)) {
+        errorMessage = "Invalid email or password";
+        setLastAuthError(errorMessage);
+      } else if (isNetworkError(error)) {
+        errorMessage = "Network error. Check your internet connection.";
+        setLastAuthError(errorMessage);
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+        setLastAuthError(errorMessage);
+      }
+
+      toast.error(errorMessage);
     } finally {
       setIsSubmittingLogin(false);
     }
@@ -165,12 +224,18 @@ const Index = ({ initialTab }: IndexProps) => {
       await logoutUser();
       toast.success("Logged out");
     } catch (error) {
-      console.error("Failed to logout:", error);
-      toast.error("Failed to end the remote session");
+      // Network or auth errors during logout are expected
+      if (isNetworkError(error) || isAuthApiError(error)) {
+        console.debug("Logout: remote session cleanup skipped", error);
+      } else {
+        console.error("Failed to logout:", error);
+        toast.error("Failed to end the remote session");
+      }
     } finally {
       setCurrentUser(null);
       setPassword("");
       setAuthStatus("unauthenticated");
+      setLastAuthError(null);
     }
   };
 
@@ -333,9 +398,18 @@ const Index = ({ initialTab }: IndexProps) => {
               <Card className="w-full max-w-md shadow-sm">
                 <CardHeader>
                   <CardTitle className="text-lg">Sign in</CardTitle>
-                  <CardDescription>Use your lab account to access tests, dashboards, and reports.</CardDescription>
+                  <CardDescription>
+                    {authStatus === "expired"
+                      ? "Your session has expired. Please sign in again."
+                      : "Use your lab account to access tests, dashboards, and reports."}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {lastAuthError && (
+                    <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
+                      {lastAuthError}
+                    </div>
+                  )}
                   <form className="space-y-4" onSubmit={handleLogin}>
                     <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
