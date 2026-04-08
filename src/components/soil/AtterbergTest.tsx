@@ -413,8 +413,10 @@ const persistAtterbergProjectToApi = async ({
           }
           testSaveCount++;
         } catch (testError) {
+          const errorMsg = testError instanceof Error ? testError.message : String(testError);
+          console.error(`Error saving test ${testSaveCount + 1} of ${totalTestCount}: ${errorMsg}`, testError);
           if (!silent && toastId) {
-            toast.error(`Failed to save test ${testSaveCount + 1}`, { id: toastId });
+            toast.error(`Failed to save test ${testSaveCount + 1}: ${errorMsg}`, { id: toastId });
           }
           throw testError;
         }
@@ -449,8 +451,10 @@ const persistAtterbergProjectToApi = async ({
           toast.success("Project saved", { id: toastId });
         }
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`Error saving Atterberg project: ${errorMsg}`, error);
         if (!silent && toastId) {
-          toast.error("Failed to save project", { id: toastId });
+          toast.error(`Failed to save project: ${errorMsg}`, { id: toastId });
         }
         throw error;
       }
@@ -470,7 +474,9 @@ const persistAtterbergProjectToApi = async ({
     }
 
     if (error instanceof Error) {
-      console.error("Failed to save Atterberg tests:", error.message);
+      console.error("Failed to save Atterberg tests:", error.message, error);
+    } else {
+      console.error("Failed to save Atterberg tests:", String(error));
     }
     throw error;
   }
@@ -772,7 +778,9 @@ const AtterbergTest = () => {
 
       // Other errors should be logged
       if (error instanceof Error) {
-        console.error("Failed to save Atterberg project to API:", error.message);
+        console.error("Failed to save Atterberg project to API:", error.message, error);
+      } else {
+        console.error("Failed to save Atterberg project to API:", String(error));
       }
     });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
