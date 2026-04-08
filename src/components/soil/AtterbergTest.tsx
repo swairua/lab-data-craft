@@ -219,12 +219,23 @@ const hasLookupCriteria = (lookup: AtterbergProjectLookup) => lookup.projectName
 
 type SaveStatus = "pending" | "success" | "network-error" | "auth-error" | "server-error" | null;
 
+interface DetailedSaveStatus {
+  status: "idle" | "saving" | "success" | "pending-retry" | "awaiting-auth" | "failed";
+  message: string;
+  isRetrying: boolean;
+  secondsUntilRetry?: number;
+}
+
 interface SaveManager {
   queue: Promise<void>;
   lastSaveResult: SaveStatus;
   retryCount: number;
   nextRetryTime: number | null;
   lastSaveResultTime: number | null;
+  authVersion: number; // Track auth state version to detect auth changes
+  saveAuthVersion: number; // Version when save was initiated
+  isAutoSavePending: boolean; // Track if autosave is currently in flight
+  lastAutoSavePromise?: Promise<void>; // Cache the last autosave promise for deduplication
 }
 
 let saveManager: SaveManager = {
@@ -233,28 +244,113 @@ let saveManager: SaveManager = {
   retryCount: 0,
   nextRetryTime: null,
   lastSaveResultTime: null,
+  authVersion: 0,
+  saveAuthVersion: 0,
+  isAutoSavePending: false,
+};
+
+/**
+ * Update the auth version in the save manager when auth state changes.
+ * This is called from Index.tsx to notify the save manager of auth changes.
+ * @param newVersion The new auth version number
+ */
+export const updateSaveManagerAuthVersion = (newVersion: number) => {
+  saveManager.authVersion = newVersion;
+};
+
+/**
+ * Clear all pending timers and operations in the save manager.
+ * This should be called on component unmount to prevent memory leaks.
+ */
+export const clearSaveManager = () => {
+  // Reset queue to resolved promise
+  saveManager.queue = Promise.resolve();
+  // Reset retry state
+  saveManager.retryCount = 0;
+  saveManager.nextRetryTime = null;
+  saveManager.lastSaveResult = null;
+  saveManager.lastSaveResultTime = null;
+};
+
+/**
+ * Get detailed save status for UI display.
+ * Exported so other components can display detailed error messages.
+ */
+export const exportDetailedSaveStatus = (): DetailedSaveStatus => {
+  return getDetailedSaveStatus();
 };
 
 let existingAtterbergRecordId: number | null = null; // Cache for existing record ID to avoid race conditions
 
-const getSaveStatus = (): string => {
-  if (saveManager.queue.constructor.name !== 'Promise') {
-    return "idle";
+const getDetailedSaveStatus = (): DetailedSaveStatus => {
+  if (saveManager.lastSaveResult === "success") {
+    return {
+      status: "success",
+      message: "Saved",
+      isRetrying: false,
+    };
   }
-  if (saveManager.lastSaveResult === "success") return "success";
-  if (saveManager.lastSaveResult === "network-error" || saveManager.lastSaveResult === "server-error") {
-    return saveManager.nextRetryTime && Date.now() < saveManager.nextRetryTime ? "pending-retry" : "failed";
+
+  if (saveManager.lastSaveResult === "network-error") {
+    const isRetrying = saveManager.nextRetryTime && Date.now() < saveManager.nextRetryTime;
+    const secondsUntilRetry = isRetrying
+      ? Math.ceil((saveManager.nextRetryTime! - Date.now()) / 1000)
+      : undefined;
+
+    return {
+      status: isRetrying ? "pending-retry" : "failed",
+      message: isRetrying
+        ? `Network error - retrying in ${secondsUntilRetry}s`
+        : "Network error - click to save",
+      isRetrying,
+      secondsUntilRetry,
+    };
   }
+
+  if (saveManager.lastSaveResult === "server-error") {
+    const isRetrying = saveManager.nextRetryTime && Date.now() < saveManager.nextRetryTime;
+    const secondsUntilRetry = isRetrying
+      ? Math.ceil((saveManager.nextRetryTime! - Date.now()) / 1000)
+      : undefined;
+
+    return {
+      status: isRetrying ? "pending-retry" : "failed",
+      message: isRetrying
+        ? `Server error - retrying in ${secondsUntilRetry}s`
+        : "Server error - click to save",
+      isRetrying,
+      secondsUntilRetry,
+    };
+  }
+
   if (saveManager.lastSaveResult === "auth-error") {
     // Auto-clear auth errors after 15 seconds, assuming user has logged in by then
     if (saveManager.lastSaveResultTime && Date.now() - saveManager.lastSaveResultTime > 15000) {
       saveManager.lastSaveResult = null;
       saveManager.lastSaveResultTime = null;
-      return "idle";
+      return {
+        status: "idle",
+        message: "",
+        isRetrying: false,
+      };
     }
-    return "awaiting-auth";
+    return {
+      status: "awaiting-auth",
+      message: "Session expired - please log in again",
+      isRetrying: false,
+    };
   }
-  return "idle";
+
+  return {
+    status: "idle",
+    message: "",
+    isRetrying: false,
+  };
+};
+
+const getSaveStatus = (): string => {
+  const detailed = getDetailedSaveStatus();
+  return detailed.status;
 };
 
 const getAtterbergResultsForProject = (rows: ApiAtterbergResultRow[], projectId: number) =>
@@ -267,8 +363,16 @@ const isDuplicateResultError = (error: unknown) => {
   if (isAuthApiError(error)) {
     return false;
   }
-  return /duplicate|unique|uq_test_results/i.test(error.message) ||
+  return /duplicate|unique|uq_test_results|uq_project_test_key/i.test(error.message) ||
          /entry.*for key/i.test(error.message);
+};
+
+const getConstraintNameFromError = (error: unknown): string | null => {
+  if (!(error instanceof Error)) return null;
+  const match = error.message.match(/unique.*?[`']([^`']+)[`']/i) ||
+                error.message.match(/constraint[:\s]*[`']?([^`'\s]+)[`']?/i) ||
+                error.message.match(/key\s*[`']?([^`'\s]+)[`']?/i);
+  return match ? match[1] : null;
 };
 
 const isNetworkFailureError = (error: unknown) =>
@@ -350,12 +454,34 @@ const persistAtterbergProjectToApi = async ({
     const projectDate = normalizeLookupValue(payload.project.date);
 
     if (!projectRow) {
-      const createdProject = await createApiRecord<ApiProjectRow>("projects", {
-        name: projectName,
-        client_name: clientName || null,
-        project_date: projectDate || null,
-      });
-      projectRow = createdProject.data;
+      try {
+        const createdProject = await createApiRecord<ApiProjectRow>("projects", {
+          name: projectName,
+          client_name: clientName || null,
+          project_date: projectDate || null,
+        });
+        projectRow = createdProject.data;
+      } catch (createError) {
+        // Soft-upsert: if duplicate, try to find and update instead
+        if (isDuplicateResultError(createError)) {
+          console.debug("Duplicate project detected, attempting soft-upsert recovery");
+          // Refetch projects to get the most current state
+          const updatedProjects = await listRecords<ApiProjectRow>("projects", { limit: 1000 });
+          const existingProject = updatedProjects.data.find((row) => matchesProjectLookup(row, lookup));
+
+          if (existingProject) {
+            // Found existing project, use it
+            projectRow = existingProject;
+            console.debug(`Successfully recovered from duplicate by using existing project ${existingProject.id}`);
+          } else {
+            // Could not find existing project, re-throw the error
+            throw createError;
+          }
+        } else {
+          // Not a duplicate error, re-throw
+          throw createError;
+        }
+      }
     } else {
       const updatedProject = await updateApiRecord<ApiProjectRow>("projects", projectRow.id, {
         name: projectName,
@@ -405,10 +531,37 @@ const persistAtterbergProjectToApi = async ({
               toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
             }
           } else {
-            // Create new test row
-            await createApiRecord("test_results", resultPayload);
-            if (!silent && toastId) {
-              toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+            // Create new test row, but handle duplicates gracefully
+            try {
+              await createApiRecord("test_results", resultPayload);
+              if (!silent && toastId) {
+                toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+              }
+            } catch (createError) {
+              // Soft-upsert: if duplicate, try to find and update instead
+              if (isDuplicateResultError(createError)) {
+                console.debug(`Duplicate test result detected for ${testKey}, attempting update recovery`);
+                // Refetch results to get the most current state
+                const updatedResults = await listRecords<ApiAtterbergResultRow>("test_results", { limit: 1000 });
+                const existingRow = updatedResults.data.find(
+                  (row) => row.test_key === testKey && Number(row.project_id) === projectRow.id
+                );
+
+                if (existingRow) {
+                  // Found existing row, update it instead
+                  await updateApiRecord("test_results", existingRow.id, resultPayload);
+                  console.debug(`Successfully recovered from duplicate by updating test result ${existingRow.id}`);
+                  if (!silent && toastId) {
+                    toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+                  }
+                } else {
+                  // Could not find existing row, re-throw the error
+                  throw createError;
+                }
+              } else {
+                // Not a duplicate error, re-throw
+                throw createError;
+              }
             }
           }
           testSaveCount++;
@@ -489,10 +642,14 @@ const saveAtterbergProjectToApi = (args: {
   status: string;
   keyResults: Array<{ label: string; value: string }>;
   silent?: boolean;
+  saveVersion?: number;
 }) => {
   const performSaveWithRetry = async () => {
     // Reset error state on new save attempt so previous auth errors don't persist
     saveManager.lastSaveResult = "idle";
+    // Capture auth version and save version at save time for retry comparison
+    saveManager.saveAuthVersion = saveManager.authVersion;
+
     try {
       await persistAtterbergProjectToApi(args);
       saveManager.lastSaveResult = "success";
@@ -524,10 +681,23 @@ const saveAtterbergProjectToApi = (args: {
           saveManager.lastSaveResult = "server-error";
         }
 
-        // Queue automatic retry after delay
+        // Queue automatic retry after delay, but only if auth version and save version haven't changed
         setTimeout(() => {
-          if (saveManager.nextRetryTime && Date.now() >= saveManager.nextRetryTime) {
+          if (saveManager.nextRetryTime &&
+              Date.now() >= saveManager.nextRetryTime &&
+              saveManager.saveAuthVersion === saveManager.authVersion &&
+              (args.saveVersion === undefined || args.saveVersion === saveVersionRef.current)) {
             void saveAtterbergProjectToApi(args);
+          } else if (saveManager.saveAuthVersion !== saveManager.authVersion) {
+            // Auth state changed, clear retry state
+            console.debug("Save retry skipped: auth state changed");
+            saveManager.retryCount = 0;
+            saveManager.nextRetryTime = null;
+          } else if (args.saveVersion !== undefined && args.saveVersion !== saveVersionRef.current) {
+            // Save version changed, newer save succeeded, skip retry
+            console.debug("Save retry skipped: newer save version exists");
+            saveManager.retryCount = 0;
+            saveManager.nextRetryTime = null;
           }
         }, delayMs);
 
@@ -617,6 +787,8 @@ const AtterbergTest = () => {
   const hydratedRef = useRef(false);
   const loadAttemptedRef = useRef(false);
   const skipNextPersistRef = useRef(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveVersionRef = useRef(0);
 
   // Track save status from the global saveManager
   const updateSaveStatus = () => {
@@ -656,6 +828,17 @@ const AtterbergTest = () => {
     updateSaveStatus();
     const interval = setInterval(updateSaveStatus, 500);
     return () => clearInterval(interval);
+  }, []);
+
+  // Clean up save manager and autosave timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current !== null) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      clearSaveManager();
+    };
   }, []);
 
   useEffect(() => {
@@ -737,52 +920,72 @@ const AtterbergTest = () => {
     }
   }, [projectState]);
 
+  // Debounced autosave effect: waits 1000ms after last state change before saving
   useEffect(() => {
     if (!hydratedRef.current) return;
-    if (skipNextPersistRef.current) {
-      skipNextPersistRef.current = false;
-      return;
+    if (skipNextPersistRef.current) return;
+
+    // Increment save version to track this state snapshot
+    const currentVersion = ++saveVersionRef.current;
+
+    // Clear any pending autosave timer
+    if (autoSaveTimerRef.current !== null) {
+      clearTimeout(autoSaveTimerRef.current);
     }
 
-    void saveAtterbergProjectToApi({
-      lookup: effectiveProjectLookup,
-      payload: buildExportPayload(),
-      dataPoints: totalDataPoints,
-      status,
-      keyResults: aggregateResults,
-      silent: true,
-    }).catch((error) => {
-      // Handle duplicate errors - they indicate the record exists and will be updated
-      if (error instanceof Error && isDuplicateResultError(error)) {
-        console.debug("Atterberg project auto-save: handled duplicate record");
-        return;
-      }
+    // Set up new debounced save timer
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
 
-      // Auth errors are expected during session loss; data is preserved locally
-      if (isAuthApiError(error)) {
-        console.warn("Auto-save skipped: authentication required (data preserved locally)");
-        return;
-      }
+      void saveAtterbergProjectToApi({
+        lookup: effectiveProjectLookup,
+        payload: buildExportPayload(),
+        dataPoints: totalDataPoints,
+        status,
+        keyResults: aggregateResults,
+        silent: true,
+        saveVersion: currentVersion,
+      }).catch((error) => {
+        // Handle duplicate errors - they indicate the record exists and will be updated
+        if (error instanceof Error && isDuplicateResultError(error)) {
+          console.debug("Atterberg project auto-save: handled duplicate record");
+          return;
+        }
 
-      // Network errors will be retried automatically; don't log as error
-      if (isNetworkError(error)) {
-        console.debug("Auto-save network error, retry scheduled:", error.message);
-        return;
-      }
+        // Auth errors are expected during session loss; data is preserved locally
+        if (isAuthApiError(error)) {
+          console.warn("Auto-save skipped: authentication required (data preserved locally)");
+          return;
+        }
 
-      // Server errors will be retried automatically
-      if (isServerError(error)) {
-        console.debug("Auto-save server error, retry scheduled:", error.message);
-        return;
-      }
+        // Network errors will be retried automatically; don't log as error
+        if (isNetworkError(error)) {
+          console.debug("Auto-save network error, retry scheduled:", error.message);
+          return;
+        }
 
-      // Other errors should be logged
-      if (error instanceof Error) {
-        console.error("Failed to save Atterberg project to API:", error.message, error);
-      } else {
-        console.error("Failed to save Atterberg project to API:", String(error));
+        // Server errors will be retried automatically
+        if (isServerError(error)) {
+          console.debug("Auto-save server error, retry scheduled:", error.message);
+          return;
+        }
+
+        // Other errors should be logged
+        if (error instanceof Error) {
+          console.error("Failed to save Atterberg project to API:", error.message, error);
+        } else {
+          console.error("Failed to save Atterberg project to API:", String(error));
+        }
+      });
+    }, 1000);
+
+    // Cleanup: clear timer when component unmounts or dependencies change
+    return () => {
+      if (autoSaveTimerRef.current !== null) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
       }
-    });
+    };
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
 
   const updateProjectMetadata = useCallback((updater: (state: AtterbergProjectState) => Partial<AtterbergProjectState>) => {
@@ -884,6 +1087,7 @@ const AtterbergTest = () => {
       dataPoints: totalDataPoints,
       status,
       keyResults: aggregateResults,
+      saveVersion: saveVersionRef.current,
     });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
 

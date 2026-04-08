@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { ProjectContext } from "@/context/ProjectContext";
@@ -53,6 +53,7 @@ import {
   isAuthApiError,
   isNetworkError,
 } from "@/lib/api";
+import { updateSaveManagerAuthVersion } from "@/components/soil/AtterbergTest";
 
 interface IndexProps {
   initialTab?: string;
@@ -80,35 +81,50 @@ const Index = ({ initialTab }: IndexProps) => {
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const today = new Date().toISOString().split("T")[0];
 
+  // Track auth state version to prevent stale async updates
+  const authVersionRef = useRef(0);
+
   const projectCtx = useMemo(() => ({ projectName, clientName, date: today }), [projectName, clientName, today]);
   const isAuthenticated = authStatus === "authenticated";
 
   // Session restore on mount
   useEffect(() => {
     let isMounted = true;
+    const restoreTokenRef = { current: Symbol() }; // Unique token for this restore request
+    const restoreVersionRef = { current: authVersionRef.current }; // Capture auth version at start
 
     const restoreSession = async () => {
+      const restoreToken = restoreTokenRef.current; // Capture token at call time
+      const restoreVersion = restoreVersionRef.current;
       try {
         const user = await fetchCurrentUser();
 
-        if (!isMounted) return;
+        // Only apply response if this is still the latest restore request
+        // and the auth version hasn't changed (no login/logout happened)
+        if (!isMounted || restoreToken !== restoreTokenRef.current || restoreVersion !== authVersionRef.current) return;
 
         if (user) {
           setCurrentUser(user);
           setAuthStatus("authenticated");
           setLastAuthError(null);
+          authVersionRef.current++;
+          updateSaveManagerAuthVersion(authVersionRef.current);
         } else {
           setCurrentUser(null);
           setAuthStatus("unauthenticated");
+          authVersionRef.current++;
+          updateSaveManagerAuthVersion(authVersionRef.current);
         }
       } catch (error) {
-        if (!isMounted) return;
+        if (!isMounted || restoreToken !== restoreTokenRef.current || restoreVersion !== authVersionRef.current) return;
 
         // Auth errors on mount mean session is not valid
         if (isAuthApiError(error)) {
           setCurrentUser(null);
           setAuthStatus("unauthenticated");
           setLastAuthError(null);
+          authVersionRef.current++;
+          updateSaveManagerAuthVersion(authVersionRef.current);
         } else if (isNetworkError(error)) {
           // Network errors on mount - try again soon
           console.warn("Session restore: network error, will retry");
@@ -118,6 +134,8 @@ const Index = ({ initialTab }: IndexProps) => {
           console.error("Session restore error:", error);
           setCurrentUser(null);
           setAuthStatus("unauthenticated");
+          authVersionRef.current++;
+          updateSaveManagerAuthVersion(authVersionRef.current);
         }
       }
     };
@@ -134,17 +152,35 @@ const Index = ({ initialTab }: IndexProps) => {
   useEffect(() => {
     if (authStatus !== "authenticated") return;
 
+    const sessionTokenRef = { current: Symbol() }; // Token to identify this session's checks
+    const sessionVersionRef = { current: authVersionRef.current }; // Capture auth version at start
+
     const sessionCheckInterval = setInterval(async () => {
+      const checkToken = sessionTokenRef.current;
+      const checkVersion = sessionVersionRef.current;
       try {
         const user = await fetchCurrentUser();
-        if (!user) {
-          // Session has expired
-          setCurrentUser(null);
-          setAuthStatus("expired");
-          setLastAuthError("Your session has expired. Please log in again.");
-          toast.info("Your session has expired. Please log in again.");
+
+        // Only process response if we're still authenticated, this check is still current,
+        // and the auth version hasn't changed (no login/logout/expire happened)
+        if (authStatus === "authenticated" && checkToken === sessionTokenRef.current && checkVersion === authVersionRef.current) {
+          if (!user) {
+            // Session has expired
+            setCurrentUser(null);
+            setAuthStatus("expired");
+            setLastAuthError("Your session has expired. Please log in again.");
+            authVersionRef.current++;
+            updateSaveManagerAuthVersion(authVersionRef.current);
+            toast.info("Your session has expired. Please log in again.");
+          }
         }
       } catch (error) {
+        // Only process errors if we're still authenticated, this check is still current,
+        // and the auth version hasn't changed
+        if (authStatus !== "authenticated" || checkToken !== sessionTokenRef.current || checkVersion !== authVersionRef.current) {
+          return;
+        }
+
         // Network errors during session check shouldn't immediately mark as expired
         if (isNetworkError(error)) {
           console.debug("Session check: network error, will retry later");
@@ -155,12 +191,18 @@ const Index = ({ initialTab }: IndexProps) => {
           setCurrentUser(null);
           setAuthStatus("expired");
           setLastAuthError("Your session has expired. Please log in again.");
+          authVersionRef.current++;
+          updateSaveManagerAuthVersion(authVersionRef.current);
           toast.info("Your session has expired. Please log in again.");
         }
       }
     }, 30 * 60 * 1000); // Check every 30 minutes
 
-    return () => clearInterval(sessionCheckInterval);
+    return () => {
+      clearInterval(sessionCheckInterval);
+      // Invalidate token so any in-flight checks will be ignored
+      sessionTokenRef.current = Symbol();
+    };
   }, [authStatus]);
 
   const handleProjectNameChange = (value: string) => {
@@ -196,6 +238,8 @@ const Index = ({ initialTab }: IndexProps) => {
       setEmail(nextEmail);
       setPassword("");
       setLastAuthError(null);
+      authVersionRef.current++;
+      updateSaveManagerAuthVersion(authVersionRef.current);
       toast.success(`Signed in as ${response.user.name}`);
     } catch (error) {
       setCurrentUser(null);
@@ -236,6 +280,8 @@ const Index = ({ initialTab }: IndexProps) => {
       setPassword("");
       setAuthStatus("unauthenticated");
       setLastAuthError(null);
+      authVersionRef.current++;
+      updateSaveManagerAuthVersion(authVersionRef.current);
     }
   };
 
