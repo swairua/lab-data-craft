@@ -75,6 +75,7 @@ const Index = ({ initialTab }: IndexProps) => {
   const projectCtx = useMemo(() => ({ projectName, clientName, date: today }), [projectName, clientName, today]);
   const isAuthenticated = authStatus === "authenticated";
 
+  // Session restore on mount
   useEffect(() => {
     let isMounted = true;
 
@@ -98,6 +99,25 @@ const Index = ({ initialTab }: IndexProps) => {
       isMounted = false;
     };
   }, []);
+
+  // Periodically check if session is still valid (every 5 minutes)
+  // This detects when the backend session expires and resets auth state
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+
+    const sessionCheckInterval = setInterval(async () => {
+      const user = await fetchCurrentUser();
+
+      if (!user) {
+        // Session has expired
+        setCurrentUser(null);
+        setAuthStatus("unauthenticated");
+        toast.info("Your session has expired. Please log in again.");
+      }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+
+    return () => clearInterval(sessionCheckInterval);
+  }, [authStatus]);
 
   const handleProjectNameChange = (value: string) => {
     setProjectName(value);

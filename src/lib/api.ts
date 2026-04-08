@@ -80,6 +80,10 @@ export const apiRequest = async <T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // Handle 401/403 auth errors more explicitly
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`Unauthorized: ${data?.message || data?.error || "Session expired or access denied"}`);
+    }
     throw new Error(data?.message || data?.error || "API request failed");
   }
 
