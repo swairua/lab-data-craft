@@ -224,6 +224,7 @@ interface SaveManager {
   lastSaveResult: SaveStatus;
   retryCount: number;
   nextRetryTime: number | null;
+  lastSaveResultTime: number | null;
 }
 
 let saveManager: SaveManager = {
@@ -231,6 +232,7 @@ let saveManager: SaveManager = {
   lastSaveResult: null,
   retryCount: 0,
   nextRetryTime: null,
+  lastSaveResultTime: null,
 };
 
 let existingAtterbergRecordId: number | null = null; // Cache for existing record ID to avoid race conditions
@@ -243,7 +245,15 @@ const getSaveStatus = (): string => {
   if (saveManager.lastSaveResult === "network-error" || saveManager.lastSaveResult === "server-error") {
     return saveManager.nextRetryTime && Date.now() < saveManager.nextRetryTime ? "pending-retry" : "failed";
   }
-  if (saveManager.lastSaveResult === "auth-error") return "awaiting-auth";
+  if (saveManager.lastSaveResult === "auth-error") {
+    // Auto-clear auth errors after 15 seconds, assuming user has logged in by then
+    if (saveManager.lastSaveResultTime && Date.now() - saveManager.lastSaveResultTime > 15000) {
+      saveManager.lastSaveResult = null;
+      saveManager.lastSaveResultTime = null;
+      return "idle";
+    }
+    return "awaiting-auth";
+  }
   return "idle";
 };
 
@@ -475,15 +485,19 @@ const saveAtterbergProjectToApi = (args: {
   silent?: boolean;
 }) => {
   const performSaveWithRetry = async () => {
+    // Reset error state on new save attempt so previous auth errors don't persist
+    saveManager.lastSaveResult = "idle";
     try {
       await persistAtterbergProjectToApi(args);
       saveManager.lastSaveResult = "success";
+      saveManager.lastSaveResultTime = null;
       saveManager.retryCount = 0;
       saveManager.nextRetryTime = null;
     } catch (error) {
       // Determine error type and set save status
       if (isAuthApiError(error)) {
         saveManager.lastSaveResult = "auth-error";
+        saveManager.lastSaveResultTime = Date.now();
         // Don't retry auth errors, require re-login
         saveManager.retryCount = 0;
         saveManager.nextRetryTime = null;
