@@ -215,7 +215,7 @@ let atterbergSaveQueue: Promise<void> = Promise.resolve();
 let existingAtterbergRecordId: number | null = null; // Cache for existing record ID to avoid race conditions
 
 const getAtterbergResultsForProject = (rows: ApiAtterbergResultRow[], projectId: number) =>
-  rows.filter((row) => row.test_key === "atterberg" && Number(row.project_id) === projectId);
+  rows.filter((row) => row.test_key?.startsWith("atterberg-") && Number(row.project_id) === projectId);
 
 const isDuplicateResultError = (error: unknown) => {
   if (!(error instanceof Error)) return false;
@@ -233,14 +233,14 @@ const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
     ]);
 
     if (!hasLookupCriteria(lookup)) {
-      const latestResult = resultsResponse.data.find((row) => row.test_key === "atterberg" && row.payload_json);
+      const latestResult = resultsResponse.data.find((row) => row.test_key?.startsWith("atterberg-") && row.payload_json);
       return latestResult ? normalizeAtterbergProjectState(extractAtterbergPayload(latestResult.payload_json)) : null;
     }
 
     const projectRow = projectsResponse.data.find((row) => matchesProjectLookup(row, lookup));
     if (!projectRow) return null;
 
-    const resultRow = resultsResponse.data.find((row) => row.test_key === "atterberg" && Number(row.project_id) === projectRow.id && row.payload_json);
+    const resultRow = resultsResponse.data.find((row) => row.test_key?.startsWith("atterberg-") && Number(row.project_id) === projectRow.id && row.payload_json);
     if (!resultRow) return null;
 
     return normalizeAtterbergProjectState(extractAtterbergPayload(resultRow.payload_json));
@@ -300,104 +300,82 @@ const persistAtterbergProjectToApi = async ({
       throw new Error("Unable to save project");
     }
 
-    let matchingResults = getAtterbergResultsForProject(resultsResponse.data, projectRow.id);
-    const resultPayload = {
-      project_id: projectRow.id,
-      test_key: "atterberg",
-      name: projectName,
-      category: "soil",
-      status,
-      data_points: dataPoints,
-      key_results_json: keyResults,
-      payload_json: payload,
-    };
+    // Save each test as a separate row with a unique test_key
+    // This allows multiple tests per project to be stored independently
+    let testSaveCount = 0;
+    const totalTestCount = payload.records.reduce((sum, record) => sum + record.tests.length, 0);
 
-    // Check if we have a cached record ID from a previous successful create
-    if (existingAtterbergRecordId !== null && matchingResults.length === 0) {
-      // Use the cached record ID to avoid duplicate errors
-      matchingResults = [{ id: existingAtterbergRecordId } as ApiAtterbergResultRow];
+    for (const record of payload.records) {
+      for (const test of record.tests) {
+        // Create a unique test_key for each test: "atterberg-{testId}"
+        const testKey = `atterberg-${test.id}`;
+
+        // Show progress for each test being saved
+        const progressMessage = `Saving test ${testSaveCount + 1} of ${totalTestCount}...`;
+        const toastId = toast.loading(progressMessage);
+
+        try {
+          const resultPayload = {
+            project_id: projectRow.id,
+            test_key: testKey,
+            name: `${projectName} - ${record.title} - ${testTypeLabels[test.type] || test.type}`,
+            category: "soil",
+            status,
+            data_points: dataPoints,
+            key_results_json: keyResults,
+            payload_json: payload,
+          };
+
+          // Find existing row for this specific test
+          const existingTestResult = resultsResponse.data.find(
+            (row) => row.test_key === testKey && Number(row.project_id) === projectRow.id
+          );
+
+          if (existingTestResult) {
+            // Update existing test row
+            await updateApiRecord("test_results", existingTestResult.id, resultPayload);
+            toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+          } else {
+            // Create new test row
+            await createApiRecord("test_results", resultPayload);
+            toast.success(`Saved test ${testSaveCount + 1} of ${totalTestCount}`, { id: toastId });
+          }
+          testSaveCount++;
+        } catch (testError) {
+          toast.error(`Failed to save test ${testSaveCount + 1}`, { id: toastId });
+          throw testError;
+        }
+      }
     }
 
-    // Always try to find and update existing record
-    // If multiple exist, update the most recent one (highest ID)
-    if (matchingResults.length > 0) {
-      const mostRecent = matchingResults.reduce((prev, curr) => (curr.id > prev.id ? curr : prev));
-
-      // Cache the record ID for future saves
-      existingAtterbergRecordId = mostRecent.id;
-
-      // Try to update the most recent record
-      await updateApiRecord("test_results", mostRecent.id, resultPayload);
-
-      // Clean up other duplicates in the background (don't block if they fail)
-      if (matchingResults.length > 1) {
-        const toDelete = matchingResults.filter((r) => r.id !== mostRecent.id);
-        Promise.allSettled(toDelete.map((row) => deleteApiRecord("test_results", row.id))).catch(() => {
-          // Silently ignore cleanup failures - the important data is saved
-        });
-      }
-    } else {
-      // No record exists, try to create one
+    // If no tests were saved, create a placeholder row to mark project as updated
+    if (totalTestCount === 0) {
+      const toastId = toast.loading("Saving project...");
       try {
-        const createdRecord = await createApiRecord("test_results", resultPayload);
-        // Cache the newly created record ID for future saves
-        if (createdRecord.data && typeof createdRecord.data === "object" && "id" in createdRecord.data) {
-          existingAtterbergRecordId = (createdRecord.data as any).id;
+        const resultPayload = {
+          project_id: projectRow.id,
+          test_key: "atterberg-project",
+          name: projectName,
+          category: "soil",
+          status,
+          data_points: dataPoints,
+          key_results_json: keyResults,
+          payload_json: payload,
+        };
+
+        const existingProjectResult = resultsResponse.data.find(
+          (row) => row.test_key === "atterberg-project" && Number(row.project_id) === projectRow.id
+        );
+
+        if (existingProjectResult) {
+          await updateApiRecord("test_results", existingProjectResult.id, resultPayload);
+        } else {
+          await createApiRecord("test_results", resultPayload);
         }
+        toast.success("Project saved", { id: toastId });
       } catch (error) {
-        // If duplicate error, another process may have created it while we were saving
-        if (!isDuplicateResultError(error)) {
-          throw error;
-        }
-
-        console.warn("Duplicate test_results record detected, refetching to find and update existing record");
-
-        // Refetch latest data and try to update instead (with retry)
-        let refetchAttempts = 0;
-        let refetchedResults: ApiAtterbergResultRow[] = [];
-
-        while (refetchAttempts < 3 && refetchedResults.length === 0) {
-          refetchAttempts++;
-          try {
-            const latestResultsResponse = await listRecords<ApiAtterbergResultRow>("test_results", {
-              limit: 1000,
-              orderBy: "updated_at",
-              direction: "DESC",
-            });
-            refetchedResults = getAtterbergResultsForProject(latestResultsResponse.data, projectRow.id);
-
-            if (refetchedResults.length === 0 && refetchAttempts < 3) {
-              // Wait a bit before retrying
-              await new Promise(resolve => setTimeout(resolve, 100 * refetchAttempts));
-            }
-          } catch (refetchError) {
-            if (refetchAttempts < 3) {
-              // Wait before retrying
-              await new Promise(resolve => setTimeout(resolve, 100 * refetchAttempts));
-            } else {
-              throw refetchError;
-            }
-          }
-        }
-
-        if (!refetchedResults[0]) {
-          // Still no record found after retries, throw the original error
-          console.error("Failed to find test_results record after duplicate error, original error:", error);
-          throw error;
-        }
-
-        // Update the most recent record
-        const mostRecent = refetchedResults.reduce((prev, curr) => (curr.id > prev.id ? curr : prev));
-        existingAtterbergRecordId = mostRecent.id; // Cache for future saves
-        await updateApiRecord("test_results", mostRecent.id, resultPayload);
-
-        // Clean up duplicates in background
-        if (refetchedResults.length > 1) {
-          const toDelete = refetchedResults.filter((r) => r.id !== mostRecent.id);
-          Promise.allSettled(toDelete.map((row) => deleteApiRecord("test_results", row.id))).catch(() => {
-            // Silently ignore cleanup failures
-          });
-        }
+        toast.error("Failed to save project", { id: toastId });
+        throw error;
       }
     }
   } catch (error) {
@@ -407,11 +385,9 @@ const persistAtterbergProjectToApi = async ({
       return;
     }
 
-    // Duplicate errors should have been handled in the inner catch block
-    // If we still have a duplicate error here, log it and continue silently
-    if (error instanceof Error && isDuplicateResultError(error)) {
-      console.warn("Atterberg project: duplicate record was attempted but handled by update logic");
-      return;
+    // Log and continue for other errors to allow local fallback
+    if (error instanceof Error) {
+      console.error("Failed to save Atterberg tests:", error.message);
     }
     throw error;
   }
@@ -444,7 +420,7 @@ const clearAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
         resultRows = getAtterbergResultsForProject(resultsResponse.data, projectRow.id);
       }
     } else {
-      const latestResult = resultsResponse.data.find((row) => row.test_key === "atterberg" && row.payload_json) ?? null;
+      const latestResult = resultsResponse.data.find((row) => row.test_key?.startsWith("atterberg-") && row.payload_json) ?? null;
       resultRows = latestResult ? [latestResult] : [];
     }
 
