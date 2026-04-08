@@ -305,7 +305,14 @@ try {
 
         $_SESSION['user_id'] = $userId;
         $_SESSION['session_id'] = $sessionId;
-        setcookie('PHPSESSID', $sessionId, strtotime($expiresAt), '/', '', true, true);
+        setcookie('PHPSESSID', $sessionId, [
+            'expires' => strtotime($expiresAt),
+            'path' => '/',
+            'domain' => '',
+            'secure' => true,
+            'httponly' => true,
+            'samesite' => 'None'
+        ]);
 
         respond([
             'message' => 'User registered and logged in',
@@ -351,7 +358,14 @@ try {
 
         $_SESSION['user_id'] = $userId;
         $_SESSION['session_id'] = $sessionId;
-        setcookie('PHPSESSID', $sessionId, strtotime($expiresAt), '/', '', true, true);
+        setcookie('PHPSESSID', $sessionId, [
+            'expires' => strtotime($expiresAt),
+            'path' => '/',
+            'domain' => '',
+            'secure' => true,
+            'httponly' => true,
+            'samesite' => 'None'
+        ]);
 
         respond([
             'message' => 'Logged in successfully',
@@ -374,7 +388,11 @@ try {
         }
 
         session_destroy();
-        setcookie('PHPSESSID', '', time() - 3600, '/');
+        setcookie('PHPSESSID', '', [
+            'expires' => time() - 3600,
+            'path' => '/',
+            'samesite' => 'None'
+        ]);
 
         respond(['message' => 'Logged out successfully']);
     }
