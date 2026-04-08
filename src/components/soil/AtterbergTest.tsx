@@ -212,11 +212,18 @@ const getAtterbergLookup = (projectName: string, clientName: string, projectDate
 const hasLookupCriteria = (lookup: AtterbergProjectLookup) => lookup.projectName !== "" || lookup.clientName !== "" || lookup.projectDate !== "";
 
 let atterbergSaveQueue: Promise<void> = Promise.resolve();
+let existingAtterbergRecordId: number | null = null; // Cache for existing record ID to avoid race conditions
 
 const getAtterbergResultsForProject = (rows: ApiAtterbergResultRow[], projectId: number) =>
   rows.filter((row) => row.test_key === "atterberg" && Number(row.project_id) === projectId);
 
-const isDuplicateResultError = (error: unknown) => error instanceof Error && /duplicate|unique|uq_test_results_project/i.test(error.message);
+const isDuplicateResultError = (error: unknown) => {
+  if (!(error instanceof Error)) return false;
+  // Match various duplicate/unique constraint error messages
+  return /duplicate|unique|uq_test_results/i.test(error.message) ||
+         /entry.*for key/i.test(error.message) ||
+         error.message.includes("122-atterberg"); // Match the specific error pattern
+};
 
 const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
   try {
@@ -305,10 +312,19 @@ const persistAtterbergProjectToApi = async ({
       payload_json: payload,
     };
 
+    // Check if we have a cached record ID from a previous successful create
+    if (existingAtterbergRecordId !== null && matchingResults.length === 0) {
+      // Use the cached record ID to avoid duplicate errors
+      matchingResults = [{ id: existingAtterbergRecordId } as ApiAtterbergResultRow];
+    }
+
     // Always try to find and update existing record
     // If multiple exist, update the most recent one (highest ID)
     if (matchingResults.length > 0) {
       const mostRecent = matchingResults.reduce((prev, curr) => (curr.id > prev.id ? curr : prev));
+
+      // Cache the record ID for future saves
+      existingAtterbergRecordId = mostRecent.id;
 
       // Try to update the most recent record
       await updateApiRecord("test_results", mostRecent.id, resultPayload);
@@ -323,28 +339,56 @@ const persistAtterbergProjectToApi = async ({
     } else {
       // No record exists, try to create one
       try {
-        await createApiRecord("test_results", resultPayload);
+        const createdRecord = await createApiRecord("test_results", resultPayload);
+        // Cache the newly created record ID for future saves
+        if (createdRecord.data && typeof createdRecord.data === "object" && "id" in createdRecord.data) {
+          existingAtterbergRecordId = (createdRecord.data as any).id;
+        }
       } catch (error) {
         // If duplicate error, another process may have created it while we were saving
         if (!isDuplicateResultError(error)) {
           throw error;
         }
 
-        // Refetch latest data and try to update instead
-        const latestResultsResponse = await listRecords<ApiAtterbergResultRow>("test_results", {
-          limit: 1000,
-          orderBy: "updated_at",
-          direction: "DESC",
-        });
-        const refetchedResults = getAtterbergResultsForProject(latestResultsResponse.data, projectRow.id);
+        console.warn("Duplicate test_results record detected, refetching to find and update existing record");
+
+        // Refetch latest data and try to update instead (with retry)
+        let refetchAttempts = 0;
+        let refetchedResults: ApiAtterbergResultRow[] = [];
+
+        while (refetchAttempts < 3 && refetchedResults.length === 0) {
+          refetchAttempts++;
+          try {
+            const latestResultsResponse = await listRecords<ApiAtterbergResultRow>("test_results", {
+              limit: 1000,
+              orderBy: "updated_at",
+              direction: "DESC",
+            });
+            refetchedResults = getAtterbergResultsForProject(latestResultsResponse.data, projectRow.id);
+
+            if (refetchedResults.length === 0 && refetchAttempts < 3) {
+              // Wait a bit before retrying
+              await new Promise(resolve => setTimeout(resolve, 100 * refetchAttempts));
+            }
+          } catch (refetchError) {
+            if (refetchAttempts < 3) {
+              // Wait before retrying
+              await new Promise(resolve => setTimeout(resolve, 100 * refetchAttempts));
+            } else {
+              throw refetchError;
+            }
+          }
+        }
 
         if (!refetchedResults[0]) {
-          // Still no record found, something is wrong
+          // Still no record found after retries, throw the original error
+          console.error("Failed to find test_results record after duplicate error, original error:", error);
           throw error;
         }
 
         // Update the most recent record
         const mostRecent = refetchedResults.reduce((prev, curr) => (curr.id > prev.id ? curr : prev));
+        existingAtterbergRecordId = mostRecent.id; // Cache for future saves
         await updateApiRecord("test_results", mostRecent.id, resultPayload);
 
         // Clean up duplicates in background
@@ -542,11 +586,15 @@ const AtterbergTest = () => {
       keyResults: aggregateResults,
     }).catch((error) => {
       // Silently ignore duplicate errors in auto-save since they indicate the record was already created
+      // and the error handler in persistAtterbergProjectToApi will handle the update
       if (error instanceof Error && isDuplicateResultError(error)) {
-        console.warn("Atterberg project auto-save: record already exists, data updated instead");
+        console.debug("Atterberg project auto-save: handled duplicate record");
         return;
       }
-      console.error("Failed to save Atterberg project to API:", error);
+      // Only log real errors, not duplicate errors
+      if (error instanceof Error) {
+        console.error("Failed to save Atterberg project to API:", error.message);
+      }
     });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
 
