@@ -247,6 +247,7 @@ let saveManager: SaveManager = {
   authVersion: 0,
   saveAuthVersion: 0,
   isAutoSavePending: false,
+  lastAutoSavePromise: undefined,
 };
 
 /**
@@ -270,6 +271,9 @@ export const clearSaveManager = () => {
   saveManager.nextRetryTime = null;
   saveManager.lastSaveResult = null;
   saveManager.lastSaveResultTime = null;
+  // Reset autosave state
+  saveManager.isAutoSavePending = false;
+  saveManager.lastAutoSavePromise = undefined;
 };
 
 /**
@@ -937,7 +941,10 @@ const AtterbergTest = () => {
     autoSaveTimerRef.current = setTimeout(() => {
       autoSaveTimerRef.current = null;
 
-      void saveAtterbergProjectToApi({
+      // Mark autosave as pending and store the promise for deduplication
+      saveManager.isAutoSavePending = true;
+
+      const autoSavePromise = saveAtterbergProjectToApi({
         lookup: effectiveProjectLookup,
         payload: buildExportPayload(),
         dataPoints: totalDataPoints,
@@ -976,7 +983,14 @@ const AtterbergTest = () => {
         } else {
           console.error("Failed to save Atterberg project to API:", String(error));
         }
+      }).finally(() => {
+        // Mark autosave as complete when promise settles (success or error)
+        saveManager.isAutoSavePending = false;
       });
+
+      // Store the promise for deduplication in manual save handler
+      saveManager.lastAutoSavePromise = autoSavePromise;
+      void autoSavePromise;
     }, 1000);
 
     // Cleanup: clear timer when component unmounts or dependencies change
@@ -1081,6 +1095,14 @@ const AtterbergTest = () => {
   );
 
   const handleSave = useCallback(async () => {
+    // Deduplication: If an autosave is currently pending, wait for it to complete
+    // instead of triggering a duplicate manual save
+    if (saveManager.isAutoSavePending && saveManager.lastAutoSavePromise) {
+      console.debug("Manual save deferred: waiting for pending autosave to complete");
+      await saveManager.lastAutoSavePromise;
+      return;
+    }
+
     await saveAtterbergProjectToApi({
       lookup: effectiveProjectLookup,
       payload: buildExportPayload(),
