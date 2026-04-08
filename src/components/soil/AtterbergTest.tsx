@@ -475,6 +475,8 @@ const saveAtterbergProjectToApi = (args: {
   silent?: boolean;
 }) => {
   const performSaveWithRetry = async () => {
+    // Reset error state on new save attempt so previous auth errors don't persist
+    saveManager.lastSaveResult = "idle";
     try {
       await persistAtterbergProjectToApi(args);
       saveManager.lastSaveResult = "success";
