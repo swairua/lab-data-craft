@@ -220,9 +220,12 @@ const getAtterbergResultsForProject = (rows: ApiAtterbergResultRow[], projectId:
 const isDuplicateResultError = (error: unknown) => {
   if (!(error instanceof Error)) return false;
   // Match various duplicate/unique constraint error messages
+  // But exclude auth errors which might contain "unique" in the context
+  if (error.message.includes("Unauthorized") || error.message.includes("Forbidden")) {
+    return false;
+  }
   return /duplicate|unique|uq_test_results/i.test(error.message) ||
-         /entry.*for key/i.test(error.message) ||
-         error.message.includes("122-atterberg"); // Match the specific error pattern
+         /entry.*for key/i.test(error.message);
 };
 
 const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
@@ -380,7 +383,15 @@ const persistAtterbergProjectToApi = async ({
     }
   } catch (error) {
     // If auth fails, silently continue (auto-save is non-critical)
-    if (error instanceof Error && (error.message.includes("Unauthorized") || error.message.includes("Forbidden"))) {
+    // Check for various auth error patterns
+    const isAuthError = error instanceof Error && (
+      error.message.includes("Unauthorized") ||
+      error.message.includes("Forbidden") ||
+      error.message.includes("Session expired") ||
+      error.message.includes("access denied")
+    );
+
+    if (isAuthError) {
       console.warn("API save skipped due to authentication, data is preserved locally");
       return;
     }
@@ -567,9 +578,15 @@ const AtterbergTest = () => {
         console.debug("Atterberg project auto-save: handled duplicate record");
         return;
       }
-      // Only log real errors, not duplicate errors
+      // Only log real errors, not duplicate errors (auth errors are silently handled)
       if (error instanceof Error) {
-        console.error("Failed to save Atterberg project to API:", error.message);
+        const isAuthError = error.message.includes("Unauthorized") ||
+                          error.message.includes("Forbidden") ||
+                          error.message.includes("Session expired") ||
+                          error.message.includes("access denied");
+        if (!isAuthError) {
+          console.error("Failed to save Atterberg project to API:", error.message);
+        }
       }
     });
   }, [aggregateResults, effectiveProjectLookup, persistedState, project.clientName, project.date, project.projectName, projectState, status, totalDataPoints]);
