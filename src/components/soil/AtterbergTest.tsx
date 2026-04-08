@@ -225,6 +225,8 @@ interface SaveManager {
   retryCount: number;
   nextRetryTime: number | null;
   lastSaveResultTime: number | null;
+  authVersion: number; // Track auth state version to detect auth changes
+  saveAuthVersion: number; // Version when save was initiated
 }
 
 let saveManager: SaveManager = {
@@ -233,6 +235,17 @@ let saveManager: SaveManager = {
   retryCount: 0,
   nextRetryTime: null,
   lastSaveResultTime: null,
+  authVersion: 0,
+  saveAuthVersion: 0,
+};
+
+/**
+ * Update the auth version in the save manager when auth state changes.
+ * This is called from Index.tsx to notify the save manager of auth changes.
+ * @param newVersion The new auth version number
+ */
+export const updateSaveManagerAuthVersion = (newVersion: number) => {
+  saveManager.authVersion = newVersion;
 };
 
 let existingAtterbergRecordId: number | null = null; // Cache for existing record ID to avoid race conditions
@@ -493,6 +506,9 @@ const saveAtterbergProjectToApi = (args: {
   const performSaveWithRetry = async () => {
     // Reset error state on new save attempt so previous auth errors don't persist
     saveManager.lastSaveResult = "idle";
+    // Capture auth version at save time for retry comparison
+    saveManager.saveAuthVersion = saveManager.authVersion;
+
     try {
       await persistAtterbergProjectToApi(args);
       saveManager.lastSaveResult = "success";
@@ -524,10 +540,17 @@ const saveAtterbergProjectToApi = (args: {
           saveManager.lastSaveResult = "server-error";
         }
 
-        // Queue automatic retry after delay
+        // Queue automatic retry after delay, but only if auth version hasn't changed
         setTimeout(() => {
-          if (saveManager.nextRetryTime && Date.now() >= saveManager.nextRetryTime) {
+          if (saveManager.nextRetryTime &&
+              Date.now() >= saveManager.nextRetryTime &&
+              saveManager.saveAuthVersion === saveManager.authVersion) {
             void saveAtterbergProjectToApi(args);
+          } else if (saveManager.saveAuthVersion !== saveManager.authVersion) {
+            // Auth state changed, clear retry state
+            console.debug("Save retry skipped: auth state changed");
+            saveManager.retryCount = 0;
+            saveManager.nextRetryTime = null;
           }
         }, delayMs);
 
