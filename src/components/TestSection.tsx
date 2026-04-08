@@ -124,8 +124,12 @@ const TestSection = ({ title, children, onSave, onClear, onExportPDF, onExportCS
                     if (result !== false) {
                       toast.success(`${title} saved`);
                     }
-                  } catch {
-                    toast.error(`${title} save failed`);
+                  } catch (error) {
+                    let errorMessage = "Unknown error";
+                    if (error instanceof Error) {
+                      errorMessage = error.message;
+                    }
+                    toast.error(`${title} save failed: ${errorMessage}`);
                   }
                 }}
               >
