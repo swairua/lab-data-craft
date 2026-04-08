@@ -67,12 +67,13 @@ const Admin = () => {
         }
 
         // Construct full URLs for images
-        const apiUrl = new URL(buildApiUrl());
-        const baseOrigin = apiUrl.origin;
-
+        // Use the external API origin for image paths
         const getImageUrl = (path: string): string => {
-          const imageUrl = new URL(path, baseOrigin);
-          return imageUrl.toString();
+          if (path.startsWith('http')) {
+            return path; // Already a full URL
+          }
+          // Use the external API base (lab.wayrus.co.ke)
+          return `https://lab.wayrus.co.ke${path}`;
         };
 
         setStoredImages({
