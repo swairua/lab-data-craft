@@ -51,6 +51,11 @@ import {
   createRecord as createApiRecord,
   deleteRecord as deleteApiRecord,
   isAuthApiError,
+  isNetworkError,
+  isServerError,
+  AuthError,
+  NetworkError,
+  ServerError,
   listRecords,
   updateRecord as updateApiRecord,
 } from "@/lib/api";
@@ -212,8 +217,35 @@ const getAtterbergLookup = (projectName: string, clientName: string, projectDate
 
 const hasLookupCriteria = (lookup: AtterbergProjectLookup) => lookup.projectName !== "" || lookup.clientName !== "" || lookup.projectDate !== "";
 
-let atterbergSaveQueue: Promise<void> = Promise.resolve();
+type SaveStatus = "pending" | "success" | "network-error" | "auth-error" | "server-error" | null;
+
+interface SaveManager {
+  queue: Promise<void>;
+  lastSaveResult: SaveStatus;
+  retryCount: number;
+  nextRetryTime: number | null;
+}
+
+let saveManager: SaveManager = {
+  queue: Promise.resolve(),
+  lastSaveResult: null,
+  retryCount: 0,
+  nextRetryTime: null,
+};
+
 let existingAtterbergRecordId: number | null = null; // Cache for existing record ID to avoid race conditions
+
+const getSaveStatus = (): string => {
+  if (saveManager.queue.constructor.name !== 'Promise') {
+    return "idle";
+  }
+  if (saveManager.lastSaveResult === "success") return "success";
+  if (saveManager.lastSaveResult === "network-error" || saveManager.lastSaveResult === "server-error") {
+    return saveManager.nextRetryTime && Date.now() < saveManager.nextRetryTime ? "pending-retry" : "failed";
+  }
+  if (saveManager.lastSaveResult === "auth-error") return "awaiting-auth";
+  return "idle";
+};
 
 const getAtterbergResultsForProject = (rows: ApiAtterbergResultRow[], projectId: number) =>
   rows.filter((row) => row.test_key?.startsWith("atterberg-") && Number(row.project_id) === projectId);
@@ -254,9 +286,16 @@ const loadAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
   } catch (error) {
     // If API is unavailable or unauthorized, return null to allow fallback to localStorage
     if (isAuthApiError(error)) {
-      console.warn("API authentication failed, using localStorage fallback");
+      console.warn("API authentication failed, falling back to localStorage");
       return null;
     }
+
+    // Network and server errors should also fallback to localStorage
+    if (isNetworkError(error) || isServerError(error)) {
+      console.warn("API unavailable, falling back to localStorage");
+      return null;
+    }
+
     throw error;
   }
 };
@@ -276,6 +315,17 @@ const persistAtterbergProjectToApi = async ({
   keyResults: Array<{ label: string; value: string }>;
   silent?: boolean;
 }) => {
+  // ALWAYS save to localStorage first as a cache layer
+  // This ensures data is never lost due to API failures
+  const cachePayload = { lookup, payload, dataPoints, status, keyResults };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem("enhancedAtterbergTests", JSON.stringify(payload));
+  } catch (error) {
+    // If localStorage fails, log but continue to try API
+    console.error("Failed to save to localStorage cache:", error);
+  }
+
   try {
     const [projectsResponse, resultsResponse] = await Promise.all([
       listRecords<ApiProjectRow>("projects", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
@@ -396,12 +446,13 @@ const persistAtterbergProjectToApi = async ({
       }
     }
   } catch (error) {
-    if (isAuthApiError(error)) {
-      console.warn("API save skipped due to authentication, data is preserved locally");
-      return;
+    // Re-throw auth and network errors so caller can handle with retry logic
+    if (isAuthApiError(error) || isNetworkError(error) || isServerError(error)) {
+      throw error;
     }
 
-    if (silent || isNetworkFailureError(error)) {
+    // For silent saves, log and return on validation errors
+    if (silent) {
       if (error instanceof Error) {
         console.warn("Atterberg project save skipped:", error.message);
       }
@@ -423,12 +474,74 @@ const saveAtterbergProjectToApi = (args: {
   keyResults: Array<{ label: string; value: string }>;
   silent?: boolean;
 }) => {
-  const queuedSave = atterbergSaveQueue.then(() => persistAtterbergProjectToApi(args), () => persistAtterbergProjectToApi(args));
-  atterbergSaveQueue = queuedSave.then(() => undefined, () => undefined);
+  const performSaveWithRetry = async () => {
+    try {
+      await persistAtterbergProjectToApi(args);
+      saveManager.lastSaveResult = "success";
+      saveManager.retryCount = 0;
+      saveManager.nextRetryTime = null;
+    } catch (error) {
+      // Determine error type and set save status
+      if (isAuthApiError(error)) {
+        saveManager.lastSaveResult = "auth-error";
+        // Don't retry auth errors, require re-login
+        saveManager.retryCount = 0;
+        saveManager.nextRetryTime = null;
+        throw error;
+      }
+
+      if (isNetworkError(error) || isServerError(error)) {
+        // For network and server errors, implement exponential backoff retry
+        const retryDelays = [5000, 10000, 20000, 40000]; // 5s, 10s, 20s, 40s
+        const delayMs = retryDelays[Math.min(saveManager.retryCount, retryDelays.length - 1)];
+
+        saveManager.retryCount++;
+        saveManager.nextRetryTime = Date.now() + delayMs;
+
+        if (isNetworkError(error)) {
+          saveManager.lastSaveResult = "network-error";
+        } else {
+          saveManager.lastSaveResult = "server-error";
+        }
+
+        // Queue automatic retry after delay
+        setTimeout(() => {
+          if (saveManager.nextRetryTime && Date.now() >= saveManager.nextRetryTime) {
+            void saveAtterbergProjectToApi(args);
+          }
+        }, delayMs);
+
+        throw error;
+      }
+
+      // Other errors: don't retry
+      throw error;
+    }
+  };
+
+  const queuedSave = saveManager.queue.then(
+    () => performSaveWithRetry(),
+    () => performSaveWithRetry()
+  );
+
+  saveManager.queue = queuedSave.then(
+    () => undefined,
+    () => undefined
+  );
+
   return queuedSave;
 };
 
 const clearAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
+  // ALWAYS clear localStorage first (user intent - they want to clear everything)
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem("enhancedAtterbergTests");
+  } catch (error) {
+    console.error("Failed to clear localStorage:", error);
+  }
+
+  // Then attempt API clear; if it fails due to auth, don't block local clear
   try {
     const [projectsResponse, resultsResponse] = await Promise.all([
       listRecords<ApiProjectRow>("projects", { limit: 1000, orderBy: "updated_at", direction: "DESC" }),
@@ -451,9 +564,13 @@ const clearAtterbergProjectFromApi = async (lookup: AtterbergProjectLookup) => {
       await Promise.all(resultRows.map((row) => deleteApiRecord("test_results", row.id)));
     }
   } catch (error) {
-    // If auth fails, log warning but still allow local clear
-    if (error instanceof Error && (error.message.includes("Unauthorized") || error.message.includes("Forbidden"))) {
-      console.warn("API clear skipped due to authentication, local data will be cleared");
+    // If auth fails or API is unavailable, log warning but don't block local clear
+    if (isAuthApiError(error)) {
+      console.warn("API clear skipped due to authentication (local data already cleared)");
+      return;
+    }
+    if (isNetworkError(error) || isServerError(error)) {
+      console.warn("API clear skipped due to network error (local data already cleared)");
       return;
     }
     throw error;
@@ -476,9 +593,16 @@ const AtterbergTest = () => {
   const [projectState, setProjectState] = useState<AtterbergProjectState>({ records: [] });
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [smokeCheckStatus, setSmokeCheckStatus] = useState<SmokeCheckStatus | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "pending-retry" | "awaiting-auth" | "failed" | null>(null);
   const hydratedRef = useRef(false);
   const loadAttemptedRef = useRef(false);
   const skipNextPersistRef = useRef(false);
+
+  // Track save status from the global saveManager
+  const updateSaveStatus = () => {
+    const status = getSaveStatus();
+    setSaveStatus(status as any);
+  };
 
   const computedRecords = useMemo<ComputedRecord[]>(() => {
     return projectState.records.map((record) => {
@@ -506,6 +630,13 @@ const AtterbergTest = () => {
     () => getAtterbergLookup(project.projectName || projectState.projectName || "Atterberg Limits Testing", project.clientName || projectState.clientName, project.date),
     [project.clientName, project.date, project.projectName, projectState.clientName, projectState.projectName],
   );
+
+  // Update save status periodically to reflect current state
+  useEffect(() => {
+    updateSaveStatus();
+    const interval = setInterval(updateSaveStatus, 500);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (loadAttemptedRef.current) return;
@@ -601,13 +732,32 @@ const AtterbergTest = () => {
       keyResults: aggregateResults,
       silent: true,
     }).catch((error) => {
-      // Silently ignore duplicate errors in auto-save since they indicate the record was already created
-      // and the error handler in persistAtterbergProjectToApi will handle the update
+      // Handle duplicate errors - they indicate the record exists and will be updated
       if (error instanceof Error && isDuplicateResultError(error)) {
         console.debug("Atterberg project auto-save: handled duplicate record");
         return;
       }
-      if (error instanceof Error && !isAuthApiError(error)) {
+
+      // Auth errors are expected during session loss; data is preserved locally
+      if (isAuthApiError(error)) {
+        console.warn("Auto-save skipped: authentication required (data preserved locally)");
+        return;
+      }
+
+      // Network errors will be retried automatically; don't log as error
+      if (isNetworkError(error)) {
+        console.debug("Auto-save network error, retry scheduled:", error.message);
+        return;
+      }
+
+      // Server errors will be retried automatically
+      if (isServerError(error)) {
+        console.debug("Auto-save server error, retry scheduled:", error.message);
+        return;
+      }
+
+      // Other errors should be logged
+      if (error instanceof Error) {
         console.error("Failed to save Atterberg project to API:", error.message);
       }
     });
@@ -991,6 +1141,7 @@ const AtterbergTest = () => {
         onExportSmokeCheck={handleExportSmokeCheck}
         exportSmokeCheckDisabled={computedRecords.length === 0}
         smokeCheckStatus={smokeCheckStatus}
+        saveStatus={saveStatus}
       >
       <div className="space-y-4 print:space-y-3">
         <Card className="border bg-muted/20 shadow-none print:border-border print:bg-transparent">

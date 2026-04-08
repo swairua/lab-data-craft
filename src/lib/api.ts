@@ -1,3 +1,31 @@
+// Custom error classes for different error types
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NetworkError";
+  }
+}
+
+export class ServerError extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
 // In development, use the local proxy; in production, use the configured URL or external API
@@ -71,20 +99,40 @@ export const apiRequest = async <T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(buildApiUrl(params), {
-    credentials: "include",
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildApiUrl(params), {
+      credentials: "include",
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    // Network error (no connection, timeout, etc.)
+    const message = error instanceof Error ? error.message : "Network request failed";
+    throw new NetworkError(`Network error: ${message}`);
+  }
 
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    // Handle 401/403 auth errors more explicitly
+    // Handle 401/403 auth errors
     if (response.status === 401 || response.status === 403) {
-      throw new Error(`Unauthorized: ${data?.message || data?.error || "Session expired or access denied"}`);
+      throw new AuthError(
+        data?.message || data?.error || "Session expired or access denied"
+      );
     }
-    throw new Error(data?.message || data?.error || "API request failed");
+
+    // Handle 5xx server errors
+    if (response.status >= 500) {
+      throw new ServerError(
+        data?.message || data?.error || "Server error"
+      );
+    }
+
+    // Handle 4xx validation/client errors (except 401/403 already handled above)
+    throw new ValidationError(
+      data?.message || data?.error || "Request validation failed"
+    );
   }
 
   return data as T;
@@ -99,8 +147,18 @@ export const loginUser = (email: string, password: string) =>
     { action: "login" },
   );
 
-export const isAuthApiError = (error: unknown) =>
-  error instanceof Error && (error.message.startsWith("Unauthorized:") || error.message.includes("Forbidden"));
+// Error type checking helpers
+export const isAuthApiError = (error: unknown): error is AuthError =>
+  error instanceof AuthError;
+
+export const isNetworkError = (error: unknown): error is NetworkError =>
+  error instanceof NetworkError;
+
+export const isServerError = (error: unknown): error is ServerError =>
+  error instanceof ServerError;
+
+export const isValidationError = (error: unknown): error is ValidationError =>
+  error instanceof ValidationError;
 
 export const fetchCurrentUser = async () => {
   try {
