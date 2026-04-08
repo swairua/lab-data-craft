@@ -10,6 +10,7 @@ $allowed_origins = [
     'https://lab-data-craft.lovable.app',
     'http://localhost:3000',
     'http://localhost:5173',
+    'http://localhost:8080',
 ];
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 // Allow any Lovable preview subdomain
@@ -26,10 +27,14 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 
 // Session configuration
+// Allow insecure cookies in development (localhost)
+$isLocalhost = strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') === 0 ||
+               strpos($_SERVER['HTTP_HOST'] ?? '', '127.0.0.1') === 0;
+
 session_set_cookie_params([
     'httponly' => true,
     'samesite' => 'None',
-    'secure' => true,
+    'secure' => !$isLocalhost, // Allow insecure cookies for localhost development
 ]);
 session_start();
 
